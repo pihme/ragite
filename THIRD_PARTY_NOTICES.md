@@ -512,3 +512,5 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ## External programs (run, not included)
 
 `make test` runs the `sqlite3` command-line program and loads the ragite extension into it. That program is not part of ragite. The extension does not link a copy of SQLite.
+
+`make test` also runs Python 3, Node.js, and Go. Python uses its standard-library `sqlite3` module. Node.js uses its built-in `node:sqlite` module. The Go test is cgo linked to the host `libsqlite3` and does not download modules. Those programs are not part of ragite, and the tests do not install a ragite package.

@@ -69,6 +69,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn tc_258_heading_path_json_escapes() {
+        assert_eq!(heading_path_json(&[]), "[]");
+        assert_eq!(
+            heading_path_json(&["A".to_string(), "B".to_string()]),
+            r#"["A","B"]"#
+        );
+        assert_eq!(
+            heading_path_json(&["say \"hi\"".to_string()]),
+            r#"["say \"hi\""]"#
+        );
+    }
+
+    #[test]
     fn tc_90_sha256_of_hello() {
         assert_eq!(
             sha256_hex("hello"),

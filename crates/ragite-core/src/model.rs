@@ -196,7 +196,7 @@ mod tests {
 
     #[cfg(feature = "builtin-model")]
     #[test]
-    fn builtin_model_embeds_on_cpu() {
+    fn tc_259_builtin_model_embeds_on_cpu() {
         let model = builtin_model().expect("model");
         assert_eq!(model.name(), "potion-base-8M");
         assert_eq!(
@@ -204,6 +204,8 @@ mod tests {
             "potion-base-8M@bf8b056651a2c21b8d2565580b8569da283cab23"
         );
         let vector = model.embed("hello", Role::Passage);
+        assert_eq!(model.dimension(), 256);
+        assert_eq!(model.dimension(), vector.len());
         assert_eq!(vector.len(), crate::DIMENSION);
         assert!(vector.iter().all(|v| v.is_finite()));
         assert_eq!(vector, model.embed("hello", Role::Query));

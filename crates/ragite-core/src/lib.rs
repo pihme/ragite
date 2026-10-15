@@ -1,9 +1,11 @@
 //! Chunking, embedding, and fusion for ragite. This crate does not link SQLite.
 
 mod chunk;
+mod docling;
 mod model;
 
-pub use chunk::{Chunk, chunk_docling, chunk_html, chunk_markdown, chunk_plain};
+pub use chunk::{Chunk, chunk_html, chunk_markdown, chunk_plain};
+pub use docling::chunk_docling;
 pub use model::{BuiltinModel, Role, builtin_model};
 
 /// Unicode scalars copied onto the next piece when a unit is split.

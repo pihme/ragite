@@ -64,7 +64,7 @@ fn tc_11_tc_83_tc_84_tc_203_tc_204_formats() {
          INSERT INTO docs(text) VALUES ('{\"schema_name\":\"DoclingDocument\"}');
          INSERT INTO docs(text, format) VALUES ('m', 'TEXT/MARKDOWN');
          INSERT INTO docs(text, format) VALUES ('h', 'Text/Html');
-         INSERT INTO docs(text, format) VALUES ('d', 'APPLICATION/VND.DOCLING.DOCUMENT+JSON');
+         INSERT INTO docs(text, format) VALUES ('{\"schema_name\":\"DoclingDocument\"}', 'APPLICATION/VND.DOCLING.DOCUMENT+JSON');
          SELECT format FROM docs ORDER BY doc_id;",
     );
     let formats: Vec<String> = (0..6).map(|i| cell(&rows, i, "format")).collect();

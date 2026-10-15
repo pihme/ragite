@@ -176,6 +176,7 @@ fn element_ref<'a>(node: &'a Value, cref: &'a str) -> &'a str {
 }
 
 fn table_text(node: &Value) -> String {
+    // A declared size or a cell index must not allocate a grid of that size (REQ-97).
     let Some(data) = node.get("data") else {
         return String::new();
     };
@@ -187,43 +188,105 @@ fn table_text(node: &Value) -> String {
     let declared_rows = data.get("num_rows").and_then(json_usize).unwrap_or(0);
     let declared_cols = data.get("num_cols").and_then(json_usize).unwrap_or(0);
     let positioned = cells.iter().any(|cell| cell_pos(cell).is_some());
-    let seq_cols = if declared_cols == 0 {
-        cells.len().max(1)
-    } else {
+    let width = if (1..=crate::CHUNK_LIMIT).contains(&declared_cols) {
         declared_cols
+    } else {
+        cells.len().max(1)
     };
-    let mut placed = Vec::new();
+    let mut rows: BTreeMap<usize, BTreeMap<usize, &str>> = BTreeMap::new();
     for (index, cell) in cells.iter().enumerate() {
         let text = cell.get("text").and_then(Value::as_str).unwrap_or("");
         let Some((row, col)) = (if positioned {
             cell_pos(cell)
         } else {
-            Some((index / seq_cols, index % seq_cols))
+            Some((index / width, index % width))
         }) else {
             continue;
         };
-        placed.push((row, col, text));
+        rows.entry(row).or_default().insert(col, text);
     }
-    let mut rows = declared_rows;
-    let mut cols = declared_cols;
-    for (row, col, _) in &placed {
-        rows = rows.max(row + 1);
-        cols = cols.max(col + 1);
+    if rows.is_empty() {
+        return empty_bounded_grid(declared_rows, declared_cols);
     }
-    if rows == 0 || cols == 0 {
-        return String::new();
+    let bounded = rows.keys().all(|row| *row < crate::CHUNK_LIMIT)
+        && rows
+            .values()
+            .all(|cols| cols.keys().all(|col| *col < crate::CHUNK_LIMIT));
+    if bounded {
+        render_bounded(&rows, declared_rows, declared_cols)
+    } else {
+        render_sparse(&rows)
     }
-    let mut grid = vec![vec![""; cols]; rows];
-    for (row, col, text) in placed {
-        if row < rows && col < cols {
-            grid[row][col] = text;
+}
+
+fn bounded_end(declared: usize, max_index: usize) -> usize {
+    let from_cells = max_index.saturating_add(1);
+    let from_declared = if declared <= crate::CHUNK_LIMIT {
+        declared
+    } else {
+        0
+    };
+    from_cells.max(from_declared)
+}
+
+fn render_bounded(
+    rows: &BTreeMap<usize, BTreeMap<usize, &str>>,
+    declared_rows: usize,
+    declared_cols: usize,
+) -> String {
+    let max_row = rows.keys().next_back().copied().unwrap_or(0);
+    let max_col = rows
+        .values()
+        .flat_map(|cols| cols.keys())
+        .copied()
+        .max()
+        .unwrap_or(0);
+    let row_end = bounded_end(declared_rows, max_row);
+    let col_end = bounded_end(declared_cols, max_col);
+    let mut lines = Vec::with_capacity(row_end);
+    for row in 0..row_end {
+        let mut parts = Vec::with_capacity(col_end);
+        for col in 0..col_end {
+            let text = rows
+                .get(&row)
+                .and_then(|cols| cols.get(&col))
+                .copied()
+                .unwrap_or("");
+            parts.push(text);
         }
-    }
-    let mut lines = Vec::with_capacity(rows);
-    for row in grid {
-        lines.push(row.join("\t"));
+        lines.push(parts.join("\t"));
     }
     lines.join("\n")
+}
+
+fn render_sparse(rows: &BTreeMap<usize, BTreeMap<usize, &str>>) -> String {
+    let mut lines = Vec::new();
+    for cols in rows.values() {
+        let mut parts = Vec::new();
+        let mut previous: Option<usize> = None;
+        for (col, text) in cols {
+            if let Some(earlier) = previous {
+                let gap = col.saturating_sub(earlier);
+                if gap > 1 && gap - 1 <= crate::CHUNK_LIMIT {
+                    for _ in 1..gap {
+                        parts.push("");
+                    }
+                }
+            }
+            parts.push(*text);
+            previous = Some(*col);
+        }
+        lines.push(parts.join("\t"));
+    }
+    lines.join("\n")
+}
+
+fn empty_bounded_grid(rows: usize, cols: usize) -> String {
+    if rows == 0 || cols == 0 || rows > crate::CHUNK_LIMIT || cols > crate::CHUNK_LIMIT {
+        return String::new();
+    }
+    let line = "\t".repeat(cols - 1);
+    (0..rows).map(|_| line.as_str()).collect::<Vec<_>>().join("\n")
 }
 
 fn cell_pos(cell: &Value) -> Option<(usize, usize)> {
@@ -511,6 +574,70 @@ mod tests {
             chunks[1].meta_json.as_deref(),
             Some(r##"{"page":null,"section":null,"element":"#/texts/0"}"##)
         );
+    }
+
+    #[test]
+    fn tc_266_table_size_does_not_allocate_a_grid() {
+        let huge_cols = serde_json::json!({
+            "schema_name": "DoclingDocument",
+            "tables": [{
+                "self_ref": "#/tables/0",
+                "data": {
+                    "num_rows": 3,
+                    "num_cols": 1000000000000000001_u64,
+                    "table_cells": [{"text": "A"}]
+                }
+            }],
+            "body": {"children": [{"$ref": "#/tables/0"}]}
+        });
+        assert_eq!(texts(&cut(&huge_cols.to_string())), vec!["A\n\n"]);
+
+        let huge_grid = serde_json::json!({
+            "schema_name": "DoclingDocument",
+            "tables": [{
+                "self_ref": "#/tables/0",
+                "data": {
+                    "num_rows": 200000,
+                    "num_cols": 200000,
+                    "table_cells": [{"text": "A"}]
+                }
+            }],
+            "body": {"children": [{"$ref": "#/tables/0"}]}
+        });
+        assert_eq!(texts(&cut(&huge_grid.to_string())), vec!["A"]);
+
+        let huge_offset = serde_json::json!({
+            "schema_name": "DoclingDocument",
+            "tables": [{
+                "self_ref": "#/tables/0",
+                "data": {
+                    "table_cells": [{
+                        "text": "A",
+                        "start_row_offset_idx": 200000,
+                        "start_col_offset_idx": 200000
+                    }]
+                }
+            }],
+            "body": {"children": [{"$ref": "#/tables/0"}]}
+        });
+        assert_eq!(texts(&cut(&huge_offset.to_string())), vec!["A"]);
+
+        let corners = serde_json::json!({
+            "schema_name": "DoclingDocument",
+            "tables": [{
+                "self_ref": "#/tables/0",
+                "data": {
+                    "num_rows": 2,
+                    "num_cols": 2,
+                    "table_cells": [
+                        {"text": "A", "start_row_offset_idx": 0, "start_col_offset_idx": 0},
+                        {"text": "D", "start_row_offset_idx": 1, "start_col_offset_idx": 1}
+                    ]
+                }
+            }],
+            "body": {"children": [{"$ref": "#/tables/0"}]}
+        });
+        assert_eq!(texts(&cut(&corners.to_string())), vec!["A\t\n\tD"]);
     }
 
     #[test]

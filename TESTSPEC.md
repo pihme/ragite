@@ -2,7 +2,7 @@
 
 Status: draft, pre-1.0. Nothing here is implemented yet. Cases carry stable IDs (`TC-n`). Future tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-250.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-250 and TC-266. TC-251 through TC-265 belong to open pull requests and are not listed in this revision.
 
 ## Conventions
 
@@ -547,3 +547,7 @@ Unless a case says otherwise:
 ## REQ-95
 
 - **TC-250** Every file under `fuzz/corpus/html`, `fuzz/corpus/markdown`, and `fuzz/corpus/docling` satisfies REQ-95. The markdown seeds are also checked as plain text. A Docling seed that is not a DoclingDocument passes when its error names the failed check and does not repeat a long document. A heading, an HTML comment, and a paragraph longer than 512 scalars are included, and that paragraph is split.
+
+## REQ-97
+
+- **TC-266** A table with `num_rows` 3 and a `num_cols` that does not fit in a grid produces one Chunk, `A` followed by two empty rows, and does not panic. A table declared as 200000 by 200000 with one cell, and a single cell positioned at row 200000 and column 200000, each produce one Chunk, `A`. A 2 by 2 table with cells only at the two corners is still `A`, a tab, a newline, a tab, and `D`.

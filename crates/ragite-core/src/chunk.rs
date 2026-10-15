@@ -38,11 +38,6 @@ pub fn chunk_html(text: &str) -> Vec<Chunk> {
     crate::html::cut(text)
 }
 
-/// Docling rules replace this body. Until then the plain cutter runs.
-pub fn chunk_docling(text: &str) -> Result<Vec<Chunk>, String> {
-    Ok(chunk_plain(text))
-}
-
 fn newline_len(chars: &[char], index: usize) -> Option<usize> {
     if index >= chars.len() {
         return None;

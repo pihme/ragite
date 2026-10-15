@@ -126,6 +126,8 @@ jobs:
 
       - name: Build the release extension
         run: |
+          # The license test runs `cargo metadata --offline`, so fetch every crate first.
+          cargo fetch --locked
           start=$(date +%s)
           env -u RAGITE_MODEL_PATH cargo build -p ragite-sqlite --release
           echo "AFTER_S=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"

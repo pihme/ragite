@@ -78,6 +78,8 @@ jobs:
         run: |
           source <(cargo llvm-cov show-env --export-prefix)
           cargo llvm-cov clean --workspace
+          # The license test runs `cargo metadata --offline` (see Makefile).
+          cargo fetch --locked
           env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
             cargo build -p ragite-sqlite
           env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \

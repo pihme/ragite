@@ -4,6 +4,9 @@ test:
 	cargo build -p ragite-sqlite
 	env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
 	cargo test --workspace
+	RAGITE_EXTENSION="$(CURDIR)/target/debug/libragite.so" python3 tests/languages/python/load_test.py
+	RAGITE_EXTENSION="$(CURDIR)/target/debug/libragite.so" node --test tests/languages/node/load_test.mjs
+	cd tests/languages/go && RAGITE_EXTENSION="$(CURDIR)/target/debug/libragite.so" GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off CGO_ENABLED=1 go test -count=1 .
 	env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
 	cargo test -p ragite-core --no-default-features --lib
 	env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \

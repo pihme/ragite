@@ -221,7 +221,7 @@ mod tests {
             "potion-retrieval-32M@6fc8051fab2a1e0ee76689cf08c853792ac285e7"
         );
         let vector = model.embed("hello", Role::Passage);
-        assert_eq!(model.dimension(), 256);
+        assert_eq!(model.dimension(), crate::DIMENSION);
         assert_eq!(model.dimension(), vector.len());
         assert_eq!(vector.len(), crate::DIMENSION);
         assert!(vector.iter().all(|v| v.is_finite()));

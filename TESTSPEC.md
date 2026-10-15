@@ -431,7 +431,7 @@ Unless a case says otherwise:
 ## REQ-69
 
 - **TC-199** `ragite_embed` and `ragite_embed_model` return a BLOB of little-endian IEEE-754 float32 values, with no header. Its length is 4 times the Model's dimension.
-- **TC-259** The built-in Model's `dimension()` is the dimension recorded in SPEC section 8.1, 256. An embedding of that Model has that many floats.
+- **TC-259** The built-in Model's `dimension()` is the dimension recorded in SPEC section 8.1 (`crate::DIMENSION`, 512 for potion-retrieval-32M). An embedding of that Model has that many floats.
 
 ## REQ-70
 

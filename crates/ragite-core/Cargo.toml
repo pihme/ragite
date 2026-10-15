@@ -10,6 +10,9 @@ publish = false
 [features]
 default = ["builtin-model"]
 builtin-model = []
+# Compiles the chunk invariant checks used by the fuzz harness.
+# The extension build leaves this off.
+fuzz-invariants = []
 
 [dependencies]
 model2vec-rs = { version = "0.3.0", default-features = false, features = ["onig"] }

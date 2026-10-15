@@ -1,0 +1,1 @@
+{"schema_name":"DoclingDocument","texts":{"a/b":{"self_ref":"#/texts/a~0b","label":"text","text":"slash"},"a~b":{"self_ref":"#/texts/a~0b","label":"text","text":"tilde"}},"body":{"children":[{"$ref":"#/texts/a~1b"},{"$ref":"#/texts/a~0b"}]}}

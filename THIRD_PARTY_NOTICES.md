@@ -509,8 +509,84 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
+## Fuzz harness (not shipped)
+
+The `fuzz/` workspace is not linked into the extension and is not part of `make test`. Its lockfile is `fuzz/Cargo.lock`. The crates below are in that lock and absent from the root `Cargo.lock`, except `getrandom` 0.4.3 and `r-efi` 6.0.0, which are extra versions of crates already listed above. The license column is the `license` field from `cargo metadata --manifest-path fuzz/Cargo.toml`. Where a license expression offers a choice, ragite takes MIT or Apache-2.0. No resolved crate in that lock ships a NOTICE file.
+
+| Crate | Version | License |
+| --- | --- | --- |
+| arbitrary | 1.5.0 | MIT OR Apache-2.0 |
+| getrandom | 0.4.3 | MIT OR Apache-2.0 |
+| jobserver | 0.1.35 | MIT OR Apache-2.0 |
+| libfuzzer-sys | 0.4.13 | (MIT OR Apache-2.0) AND NCSA |
+| r-efi | 6.0.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later |
+
+`libfuzzer-sys` 0.4.13 declares `license = "(MIT OR Apache-2.0) AND NCSA"` in its `Cargo.toml`. Its README says the files in `libfuzzer/` are NCSA and everything else is Apache-2.0 and MIT. The vendored `libfuzzer` sources carry `SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception` and point at <https://llvm.org/LICENSE.txt>. That file is the Apache License 2.0 (already reproduced under sqlite-vec) with the LLVM exceptions below, and it also prints the legacy University of Illinois/NCSA license. The harness links this engine only when someone runs the fuzz targets.
+
+LLVM exceptions, from <https://llvm.org/LICENSE.txt>:
+
+```
+As an exception, if, as a result of your compiling your source code, portions
+of this Software are embedded into an Object form of such source code, you
+may redistribute such embedded portions in such Object form without complying
+with the conditions of Sections 4(a), 4(b) and 4(d) of the License.
+
+In addition, if you combine or link compiled forms of this Software with
+software that is licensed under the GPLv2 ("Combined Software") and if a
+court of competent jurisdiction determines that the patent provision (Section
+3), the indemnity provision (Section 9) or other Section of the License
+conflicts with the conditions of the GPLv2, you may retroactively and
+prospectively choose to deem waived or otherwise exclude such Section(s) of
+the License, but only in their entirety and only with respect to the Combined
+Software.
+```
+
+University of Illinois/NCSA Open Source License, from the same file:
+
+```
+Copyright (c) 2003-2019 University of Illinois at Urbana-Champaign.
+All rights reserved.
+
+Developed by:
+
+    LLVM Team
+
+    University of Illinois at Urbana-Champaign
+
+    http://llvm.org
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal with
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimers.
+
+    * Redistributions in binary form must reproduce the above copyright notice,
+      this list of conditions and the following disclaimers in the
+      documentation and/or other materials provided with the distribution.
+
+    * Neither the names of the LLVM Team, University of Illinois at
+      Urbana-Champaign, nor the names of its contributors may be used to
+      endorse or promote products derived from this Software without specific
+      prior written permission.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH THE
+SOFTWARE.
+```
+
 ## External programs (run, not included)
 
 `make test` runs the `sqlite3` command-line program and loads the ragite extension into it. That program is not part of ragite. The extension does not link a copy of SQLite.
 
 `make test` also runs Python 3, Node.js, and Go. Python uses its standard-library `sqlite3` module. Node.js uses its built-in `node:sqlite` module. The Go test is cgo linked to the host `libsqlite3` and does not download modules. Those programs are not part of ragite, and the tests do not install a ragite package.
+
+The manual Fuzz workflow installs `cargo-fuzz` 0.13.2 and runs it. That crate's `Cargo.toml` says `license = "MIT OR Apache-2.0"`. It is not part of the extension.

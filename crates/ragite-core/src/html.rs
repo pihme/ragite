@@ -2,6 +2,15 @@
 
 use crate::chunk::{Chunk, split_range};
 
+/// One chunk, and whether the length limit leaves it whole.
+/// A heading or a comment is whole. A paragraph or loose text is not.
+pub(crate) struct Piece {
+    pub chunk: Chunk,
+    /// Read by the fuzz invariant checks. A normal build only writes it.
+    #[cfg_attr(not(any(test, feature = "fuzz-invariants")), allow(dead_code))]
+    pub whole: bool,
+}
+
 include!("html_entities.rs");
 
 /// One decoded scalar and the stored-HTML span that produced it.
@@ -23,7 +32,7 @@ struct Acc {
 }
 
 impl Acc {
-    fn flush(&mut self, out: &mut Vec<Chunk>) {
+    fn flush(&mut self, out: &mut Vec<Piece>) {
         let atoms = collapse(std::mem::take(&mut self.atoms));
         emit_split(out, &atoms, &self.path);
     }
@@ -48,13 +57,21 @@ enum Node {
 }
 
 pub(crate) fn cut(text: &str) -> Vec<Chunk> {
+    cut_pieces(text)
+        .into_iter()
+        .map(|piece| piece.chunk)
+        .collect()
+}
+
+/// Same chunks as [`cut`]. `whole` is set for a heading or a comment.
+pub(crate) fn cut_pieces(text: &str) -> Vec<Piece> {
     let chars: Vec<char> = text.chars().collect();
     let nodes = parse(&chars);
     let mut outline = Vec::new();
     let mut out = Vec::new();
     process_container(&nodes, &chars, &mut outline, &mut out);
     // Document order follows where each piece starts in the stored HTML.
-    out.sort_by_key(|chunk| chunk.start);
+    out.sort_by_key(|piece| piece.chunk.start);
     out
 }
 
@@ -65,7 +82,7 @@ fn titles(outline: &[Heading]) -> Vec<String> {
         .collect()
 }
 
-fn sync_path(acc: &mut Acc, outline: &[Heading], out: &mut Vec<Chunk>) {
+fn sync_path(acc: &mut Acc, outline: &[Heading], out: &mut Vec<Piece>) {
     let path = titles(outline);
     if path != acc.path {
         acc.flush(out);
@@ -77,7 +94,7 @@ fn process_container(
     nodes: &[Node],
     chars: &[char],
     outline: &mut Vec<Heading>,
-    out: &mut Vec<Chunk>,
+    out: &mut Vec<Piece>,
 ) {
     let mut acc = Acc {
         atoms: Vec::new(),
@@ -91,7 +108,7 @@ fn walk_sequence(
     nodes: &[Node],
     chars: &[char],
     outline: &mut Vec<Heading>,
-    out: &mut Vec<Chunk>,
+    out: &mut Vec<Piece>,
     acc: &mut Acc,
 ) {
     for node in nodes {
@@ -144,7 +161,7 @@ fn process_heading(
     children: &[Node],
     chars: &[char],
     outline: &mut Vec<Heading>,
-    out: &mut Vec<Chunk>,
+    out: &mut Vec<Piece>,
 ) {
     let mut atoms = Vec::new();
     collect_absorbed(children, chars, &mut atoms);
@@ -165,7 +182,7 @@ fn process_paragraph(
     children: &[Node],
     chars: &[char],
     outline: &mut Vec<Heading>,
-    out: &mut Vec<Chunk>,
+    out: &mut Vec<Piece>,
 ) {
     let mut atoms = Vec::new();
     collect_absorbed(children, chars, &mut atoms);
@@ -177,7 +194,7 @@ fn process_paragraph(
 }
 
 /// Inside a heading or paragraph the parent already owns the inline text.
-fn walk_absorbed(nodes: &[Node], chars: &[char], outline: &mut Vec<Heading>, out: &mut Vec<Chunk>) {
+fn walk_absorbed(nodes: &[Node], chars: &[char], outline: &mut Vec<Heading>, out: &mut Vec<Piece>) {
     for node in nodes {
         match node {
             Node::Comment { text, start, end } => emit_comment(out, text, *start, *end, outline),
@@ -228,41 +245,58 @@ fn collect_absorbed(nodes: &[Node], chars: &[char], atoms: &mut Vec<Atom>) {
     }
 }
 
-fn emit_comment(out: &mut Vec<Chunk>, text: &str, start: usize, end: usize, outline: &[Heading]) {
+fn emit_comment(out: &mut Vec<Piece>, text: &str, start: usize, end: usize, outline: &[Heading]) {
     if text.is_empty() {
         return;
     }
-    push(out, text.to_string(), start, end, &titles(outline));
+    push(out, text.to_string(), start, end, &titles(outline), true);
 }
 
-fn emit_whole(out: &mut Vec<Chunk>, atoms: &[Atom], path: &[String]) {
+fn emit_whole(out: &mut Vec<Piece>, atoms: &[Atom], path: &[String]) {
     if atoms.is_empty() {
         return;
     }
     let text: String = atoms.iter().map(|atom| atom.ch).collect();
-    push(out, text, atoms[0].start, atoms[atoms.len() - 1].end, path);
+    push(
+        out,
+        text,
+        atoms[0].start,
+        atoms[atoms.len() - 1].end,
+        path,
+        true,
+    );
 }
 
-fn emit_split(out: &mut Vec<Chunk>, atoms: &[Atom], path: &[String]) {
+fn emit_split(out: &mut Vec<Piece>, atoms: &[Atom], path: &[String]) {
     if atoms.is_empty() {
         return;
     }
     for (from, to) in split_range(0, atoms.len()) {
         let text: String = atoms[from..to].iter().map(|atom| atom.ch).collect();
-        push(out, text, atoms[from].start, atoms[to - 1].end, path);
+        push(out, text, atoms[from].start, atoms[to - 1].end, path, false);
     }
 }
 
-fn push(out: &mut Vec<Chunk>, text: String, start: usize, end: usize, path: &[String]) {
+fn push(
+    out: &mut Vec<Piece>,
+    text: String,
+    start: usize,
+    end: usize,
+    path: &[String],
+    whole: bool,
+) {
     if text.is_empty() {
         return;
     }
-    out.push(Chunk {
-        text,
-        start,
-        end,
-        heading_path: path.to_vec(),
-        meta_json: None,
+    out.push(Piece {
+        chunk: Chunk {
+            text,
+            start,
+            end,
+            heading_path: path.to_vec(),
+            meta_json: None,
+        },
+        whole,
     });
 }
 

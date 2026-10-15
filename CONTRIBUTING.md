@@ -29,3 +29,7 @@ make test
 Python 3, Node.js, and Go must be on `PATH`. The Python test uses the standard-library `sqlite3` module. The Node.js test uses `node:sqlite`. The Go test uses cgo and links the host `libsqlite3` (`libsqlite3.so.0` on Linux). Those tests load the extension built in the tree. They do not use the network and do not install a ragite package.
 
 Test cases are numbered in [TESTSPEC.md](TESTSPEC.md). Cite those numbers from the tests.
+
+## Fuzzing
+
+Fuzzing is optional and is not part of `make test`. The targets, the seed corpus, and how to run them locally or from the manual Fuzz workflow are in [fuzz/README.md](fuzz/README.md).

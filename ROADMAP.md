@@ -6,7 +6,7 @@ Statements about future versions reflect the current line of thinking. They are 
 
 ## Version 1.0
 
-Version 1.0 delivers everything specified in [SPEC.md](SPEC.md): the SQLite extension with its virtual table interface (INSERT, UPDATE, DELETE, search), source linkage through documents and chunks, a built-in model or a model linked at build time, and the licensing and NOTICE handling for models. The default model is chosen by benchmark (SPEC section 8.1). A model is not loaded from a path or a URL at run time.
+Version 1.0 delivers everything specified in [SPEC.md](SPEC.md): the SQLite extension with its virtual table interface (INSERT, UPDATE, DELETE, search), source linkage through documents and chunks, a built-in model or a model linked at build time, and the licensing and NOTICE handling for models. The built-in model, chunk length, overlap, and fusion depth are recorded in SPEC section 8.1. A model is not loaded from a path or a URL at run time.
 
 ## Version 2.0
 

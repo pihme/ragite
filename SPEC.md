@@ -200,9 +200,16 @@ Known licenses (from the design research, to be verified against real metadata w
 
 ## 8. Open questions
 
-### 8.1 Default model
+### 8.1 Version 1 constants
 
-Which model is built in for variant (a) is decided during development by a benchmark (retrieval quality, CPU speed, size). The same benchmark chooses version 1's chunk length limit, overlap (REQ-33), and the number of Chunks taken from each ranking before fusion (REQ-15). Candidates (parameters, dimension and license from the Hugging Face model cards):
+The maintainer chose the version 1 constants. They are fixed for every caller of this build.
+
+- **Model.** potion-base-8M, a static Model2Vec model, English, MIT, dimension 256. Human-readable name `potion-base-8M`. Technical identifier `potion-base-8M@bf8b056651a2c21b8d2565580b8569da283cab23` (the Hugging Face commit of the weights). Query prefix and passage prefix are empty. The bundled files are `config.json`, `tokenizer.json`, and `model.safetensors` from that revision. The ONNX file is not bundled.
+- **Chunk length.** 512 Unicode scalars.
+- **Overlap.** 64 Unicode scalars.
+- **Fusion depth.** 50 Chunks from each ranking.
+
+The table is the set that was considered. It is not a menu. Parameters, dimension, and license come from the Hugging Face model cards:
 
 | Model | Parameters | Dim. | License | Kind |
 | --- | --- | --- | --- | --- |
@@ -218,7 +225,7 @@ Which model is built in for variant (a) is decided during development by a bench
 | paraphrase-multilingual-MiniLM-L12-v2 (bonus) | 118 M | 384 | Apache-2.0 | Transformer, multilingual |
 | gte-multilingual-base (bonus) | 305 M | 768 | Apache-2.0 | Transformer, multilingual, largest candidate |
 
-Model2Vec claims up to 500x faster CPU inference than its source model with small quality loss; reliable absolute CPU numbers are missing, which the benchmark settles.
+potion-base-8M is the built-in Model because it is the smallest English MIT candidate and it runs as static vectors on CPU.
 
 ## 9. References
 

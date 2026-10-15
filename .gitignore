@@ -12,3 +12,6 @@
 release-out/
 # Cargo
 /target
+
+bench/.models/
+bench/results/

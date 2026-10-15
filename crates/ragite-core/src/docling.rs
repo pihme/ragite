@@ -934,4 +934,29 @@ mod tests {
             Some(r##"{"page":null,"section":"ABSTRACT","element":"#/texts/2"}"##)
         );
     }
+
+    #[test]
+    fn tc_249_json_pointer_escapes_name_the_item() {
+        let doc = r##"{
+            "schema_name": "DoclingDocument",
+            "texts": {
+                "a/b": {"label": "text", "text": "slash"},
+                "a~b": {"label": "text", "text": "tilde"}
+            },
+            "body": {"children": [
+                {"$ref": "#/texts/a~1b"},
+                {"$ref": "#/texts/a~0b"}
+            ]}
+        }"##;
+        let chunks = cut(doc);
+        assert_eq!(texts(&chunks), vec!["slash", "tilde"]);
+        assert_eq!(
+            chunks[0].meta_json.as_deref(),
+            Some(r##"{"page":null,"section":null,"element":"#/texts/a~1b"}"##)
+        );
+        assert_eq!(
+            chunks[1].meta_json.as_deref(),
+            Some(r##"{"page":null,"section":null,"element":"#/texts/a~0b"}"##)
+        );
+    }
 }

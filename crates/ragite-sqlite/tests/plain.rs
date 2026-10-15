@@ -587,3 +587,19 @@ fn tc_243_caller_cannot_create_a_companion() {
     assert_eq!(cell(&rows, 0, "chunk"), "hello");
     let _ = std::fs::remove_file(&path);
 }
+
+#[test]
+fn tc_247_real_text_keeps_its_fraction() {
+    let rows = ok(
+        "CREATE VIRTUAL TABLE docs USING ragite;
+         INSERT INTO docs(text, source) VALUES (3.7, -2.5);
+         INSERT INTO docs(text) VALUES (4);
+         SELECT text, source FROM docs ORDER BY doc_id;
+         SELECT chunk FROM docs_chunks ORDER BY doc_id;",
+    );
+    assert_eq!(cell(&rows, 0, "text"), "3.7");
+    assert_eq!(cell(&rows, 0, "source"), "-2.5");
+    assert_eq!(cell(&rows, 1, "text"), "4");
+    assert_eq!(cell(&rows, 2, "chunk"), "3.7");
+    assert_eq!(cell(&rows, 3, "chunk"), "4");
+}

@@ -248,4 +248,13 @@ fn tc_235_tc_236_character_references() {
          SELECT chunk FROM docs_chunks;");
     assert_eq!(rows.as_array().unwrap().len(), 1);
     assert_eq!(chunk_at(&rows, 0), "<!-- not -->");
+
+    let rows = ok("CREATE VIRTUAL TABLE docs USING ragite;
+         INSERT INTO docs(text, format)
+         VALUES ('<p>&#128; &#150; &#0; &#xD800; &#1114112;</p>', 'text/html');
+         SELECT chunk FROM docs_chunks;");
+    assert_eq!(
+        chunk_at(&rows, 0),
+        "\u{20AC} \u{2013} \u{FFFD} \u{FFFD} \u{FFFD}"
+    );
 }

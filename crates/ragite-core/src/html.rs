@@ -974,6 +974,15 @@ mod tests {
     }
 
     #[test]
+    fn tc_248_numeric_references_follow_html_replacements() {
+        assert_eq!(
+            texts(&chunk_html("<p>&#128; &#150; &#0; &#xD800; &#1114112;</p>")),
+            vec!["\u{20AC} \u{2013} \u{FFFD} \u{FFFD} \u{FFFD}"]
+        );
+        assert_eq!(texts(&chunk_html("<!-- &#128; -->")), vec![" &#128; "]);
+    }
+
+    #[test]
     fn tc_87_tc_140_tc_200_tc_222_length_limit() {
         let title: String = std::iter::repeat('h').take(CHUNK_LIMIT + 1).collect();
         let heading = chunk_html(&format!("<h1>{title}</h1><p>Body</p>"));

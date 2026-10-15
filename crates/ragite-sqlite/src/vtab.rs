@@ -1366,12 +1366,15 @@ pub(crate) fn value_text(value: *mut sqlite3_value) -> Option<String> {
     }
     unsafe {
         let kind = sqlite3_value_type(value);
-        if kind != SQLITE_TEXT && kind != libsqlite3_sys::SQLITE_BLOB {
-            if kind == SQLITE_INTEGER || kind == SQLITE_FLOAT {
-                return Some(sqlite3_value_int64(value).to_string());
-            }
+        if kind != SQLITE_TEXT
+            && kind != libsqlite3_sys::SQLITE_BLOB
+            && kind != SQLITE_INTEGER
+            && kind != SQLITE_FLOAT
+        {
             return None;
         }
+        // sqlite3_value_text applies SQLite's own numeric-to-text conversion.
+        // sqlite3_value_int64 would drop the fraction of a REAL (3.7 -> 3).
         let ptr = sqlite3_value_text(value);
         if ptr.is_null() {
             return None;

@@ -3,7 +3,7 @@
 mod chunk;
 mod model;
 
-pub use chunk::{Chunk, chunk_plain};
+pub use chunk::{Chunk, chunk_docling, chunk_html, chunk_markdown, chunk_plain};
 pub use model::{BuiltinModel, Role, builtin_model};
 
 /// Unicode scalars copied onto the next piece when a unit is split.

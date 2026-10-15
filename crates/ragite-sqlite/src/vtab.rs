@@ -13,7 +13,8 @@ use libsqlite3_sys::{
     SQLITE_OK, SQLITE_TEXT, SQLITE_TRANSIENT,
 };
 use ragite_core::{
-    BuiltinModel, Chunk, Role, TECHNICAL_ID, builtin_model, chunk_plain, heading_path_json,
+    BuiltinModel, Chunk, Role, TECHNICAL_ID, builtin_model, chunk_docling, chunk_html, chunk_markdown,
+    chunk_plain, heading_path_json,
     sha256_hex,
 };
 
@@ -828,9 +829,13 @@ fn insert_document(
 }
 
 fn write_chunks(table: &Vtab, doc_id: i64, text: &str, format: &str) -> Result<(), String> {
-    let _ = format;
     let model = builtin_model()?;
-    let chunks = chunk_plain(text);
+    let chunks = match format {
+        "text/markdown" => chunk_markdown(text),
+        "text/html" => chunk_html(text),
+        "application/vnd.docling.document+json" => chunk_docling(text)?,
+        _ => chunk_plain(text),
+    };
     for chunk in chunks {
         insert_chunk(table, doc_id, &chunk, model)?;
     }

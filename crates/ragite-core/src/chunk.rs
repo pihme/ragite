@@ -28,6 +28,21 @@ pub fn chunk_plain(text: &str) -> Vec<Chunk> {
     out
 }
 
+/// Markdown rules replace this body. Until then the plain cutter runs.
+pub fn chunk_markdown(text: &str) -> Vec<Chunk> {
+    chunk_plain(text)
+}
+
+/// HTML rules replace this body. Until then the plain cutter runs.
+pub fn chunk_html(text: &str) -> Vec<Chunk> {
+    chunk_plain(text)
+}
+
+/// Docling rules replace this body. Until then the plain cutter runs.
+pub fn chunk_docling(text: &str) -> Result<Vec<Chunk>, String> {
+    Ok(chunk_plain(text))
+}
+
 fn newline_len(chars: &[char], index: usize) -> Option<usize> {
     if index >= chars.len() {
         return None;
@@ -96,7 +111,7 @@ fn paragraph_ranges(chars: &[char]) -> Vec<(usize, usize)> {
     ranges
 }
 
-fn split_range(start: usize, end: usize) -> Vec<(usize, usize)> {
+pub(crate) fn split_range(start: usize, end: usize) -> Vec<(usize, usize)> {
     let mut pieces = Vec::new();
     if end <= start {
         return pieces;

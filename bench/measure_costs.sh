@@ -6,8 +6,19 @@
 set -euo pipefail
 ext=$1 out=$2
 db=$(mktemp -u /tmp/ragite-bench-XXXX.db)
-/usr/bin/time -v -o /tmp/ragite-time.txt \
-  python3 bench/run_quality.py --extension "$ext" --dataset mteb/scifact --db "$db" --out "$out.quality.json"
+# Peak RSS of the run. GNU time is not installed everywhere; fall back to
+# getrusage, which reports the same "Maximum resident set size" in kB.
+timed() {
+  if [ -x /usr/bin/time ]; then /usr/bin/time -v -o /tmp/ragite-time.txt "$@"; return; fi
+  python3 - "$@" <<'PY'
+import resource, subprocess, sys
+rc = subprocess.call(sys.argv[1:])
+kb = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+open("/tmp/ragite-time.txt", "w").write(f"Maximum resident set size (kbytes): {kb}\n")
+sys.exit(rc)
+PY
+}
+timed python3 bench/run_quality.py --extension "$ext" --dataset mteb/scifact --db "$db" --out "$out.quality.json"
 python3 - "$ext" "$db" "$out" <<'PY'
 import json, os, platform, re, sys
 ext, db, out = sys.argv[1:]

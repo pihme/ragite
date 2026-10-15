@@ -114,9 +114,39 @@ fn weight_bytes() -> (&'static [u8], &'static [u8], &'static [u8]) {
 fn weight_bytes() -> (&'static [u8], &'static [u8], &'static [u8]) {
     (
         include_bytes!(env!("RAGITE_COMPILED_TOKENIZER")),
-        include_bytes!(env!("RAGITE_COMPILED_WEIGHTS")),
+        provider_weights(),
         include_bytes!(env!("RAGITE_COMPILED_CONFIG")),
     )
+}
+
+// The provider weights are linked with the assembler's `.incbin` instead of
+// `include_bytes!`. rustc holds an included file in memory several times over,
+// which gets a 512 MB model (potion-multilingual-128M) OOM-killed on a 16 GB
+// machine; the assembler streams the file into the object instead.
+#[cfg(ragite_provider_model)]
+std::arch::global_asm!(
+    ".pushsection .rodata.ragite_weights,\"a\"",
+    ".balign 16",
+    ".globl ragite_weights_start",
+    "ragite_weights_start:",
+    concat!(".incbin \"", env!("RAGITE_COMPILED_WEIGHTS"), "\""),
+    ".globl ragite_weights_end",
+    "ragite_weights_end:",
+    ".popsection",
+);
+
+#[cfg(ragite_provider_model)]
+fn provider_weights() -> &'static [u8] {
+    unsafe extern "C" {
+        static ragite_weights_start: u8;
+        static ragite_weights_end: u8;
+    }
+    // SAFETY: both symbols bound one contiguous read-only blob emitted above.
+    unsafe {
+        let start = &raw const ragite_weights_start;
+        let end = &raw const ragite_weights_end;
+        std::slice::from_raw_parts(start, end.offset_from(start) as usize)
+    }
 }
 
 #[cfg(test)]

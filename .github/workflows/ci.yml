@@ -115,6 +115,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          # release-plz may compile ragite-core; build.rs rejects LFS pointer files.
+          lfs: true
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable

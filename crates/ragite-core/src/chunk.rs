@@ -28,9 +28,9 @@ pub fn chunk_plain(text: &str) -> Vec<Chunk> {
     out
 }
 
-/// Markdown rules replace this body. Until then the plain cutter runs.
+/// Cut Markdown on headings, blank lines, fences, and indented code.
 pub fn chunk_markdown(text: &str) -> Vec<Chunk> {
-    chunk_plain(text)
+    crate::markdown::cut(text)
 }
 
 /// HTML rules replace this body. Until then the plain cutter runs.

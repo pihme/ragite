@@ -2,24 +2,33 @@
 
 Embeddable, CPU-friendly retrieval (RAG) as a SQLite extension.
 
-Status: pre-1.0, specification only. No code yet.
-
 Website: https://pihme.github.io/ragite/
 
-## Requirements
+## What it is
 
-<!-- TODO: runtime and tools with minimum versions (e.g. Node.js 22+, Go 1.24+, Docker), OS/arch limits. -->
+ragite is an embeddable retrieval component for retrieval-augmented generation (RAG). It splits text into chunks, computes embeddings on the CPU and finds the best-matching passages with a hybrid search (vector similarity plus full-text BM25), always with a link back to the source document and position. It ships as a loadable SQLite extension, so any application in any language that can load SQLite extensions can use it: SQLite for RAG.
 
-## Getting started
-
-```bash
-git clone https://github.com/pihme/ragite.git
-cd ragite
-# TODO: install / build steps
-make test
+```sql
+SELECT load_extension('ragite');
+CREATE VIRTUAL TABLE docs USING ragite(model='default');
+INSERT INTO docs(text, source) VALUES ('# Installation ...', 'manual.md');
+SELECT chunk, source FROM docs WHERE docs MATCH 'How do I install it?' LIMIT 5;
 ```
 
-<!-- TODO: smallest working example (hello world), then a link to the usage docs. Releases: https://github.com/pihme/ragite/releases -->
+(Planned interface; nothing is implemented yet.)
+
+## Goal
+
+- One file, in process, no server: documents, chunks, vectors and full-text index live in the same SQLite database.
+- Write and search through one virtual table; `INSERT`, `UPDATE`, `DELETE` and `ROLLBACK` keep everything consistent.
+- Runs well on a CPU, with a built-in default embedding model and the option to bring your own.
+- Core in Rust, separate from the SQLite layer, so a Rust library stays possible later.
+
+Out of scope: parsing source formats (PDF, Office, ...), answer generation and evaluation. Input is plain text, Markdown, HTML or DoclingDocument JSON.
+
+## Status
+
+Pre-1.0, specification only. There is no code, no release and no package yet. The design lives in [SPEC.md](SPEC.md); the default embedding model is still open and will be chosen by benchmark.
 
 ## Contributing
 

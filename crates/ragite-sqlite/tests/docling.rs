@@ -384,3 +384,31 @@ fn tc_183_element_ref_is_not_an_fts_hit() {
         .collect();
     assert_eq!(counts, vec!["0".to_string(), "1".to_string()]);
 }
+
+#[test]
+fn tc_241_sibling_section_header_is_stored_on_the_following_chunk() {
+    let doc = json!({
+        "schema_name": "DoclingDocument",
+        "texts": [
+            {"self_ref": "#/texts/0", "label": "section_header", "text": "ABSTRACT", "level": 1, "children": []},
+            {"self_ref": "#/texts/1", "label": "text", "text": "Summary", "children": []}
+        ],
+        "body": {"children": [
+            {"$ref": "#/texts/0"},
+            {"$ref": "#/texts/1"}
+        ]}
+    });
+    let rows = ok(&format!(
+        "CREATE VIRTUAL TABLE docs USING ragite;\n{}
+         SELECT chunk, heading_path, meta_json FROM docs_chunks ORDER BY rowid;",
+        insert(&doc.to_string(), "pdf")
+    ));
+    assert_eq!(cell(&rows, 0, "chunk"), "ABSTRACT");
+    assert_eq!(cell(&rows, 0, "heading_path"), "[]");
+    assert_eq!(cell(&rows, 1, "chunk"), "Summary");
+    assert_eq!(cell(&rows, 1, "heading_path"), r#"["ABSTRACT"]"#);
+    assert_eq!(
+        cell(&rows, 1, "meta_json"),
+        r##"{"page":null,"section":"ABSTRACT","element":"#/texts/1"}"##
+    );
+}

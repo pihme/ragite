@@ -44,6 +44,9 @@ const COL_META: c_int = 6;
 const COL_C_SCORE: c_int = 7;
 
 static ALLOW_DROP: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
+/// Set only around the companion `CREATE` issued by `create_shadows`.
+static ALLOW_CREATE: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 
 pub fn module() -> &'static sqlite3_module {
     static MODULE: OnceLock<sqlite3_module> = OnceLock::new();
@@ -63,6 +66,9 @@ pub fn module() -> &'static sqlite3_module {
         module.xColumn = Some(vtab_column);
         module.xRowid = Some(vtab_rowid);
         module.xUpdate = Some(vtab_update);
+        // A null xRename lets SQLite rename the schema row and leave the
+        // shadow tables under the old name. Refusing keeps both names put.
+        module.xRename = Some(vtab_rename);
         module
     })
 }
@@ -182,6 +188,20 @@ unsafe fn create(
     pp_vtab: *mut *mut sqlite3_vtab,
 ) -> Result<(), String> {
     let args = read_args(argc, argv)?;
+    if args.declared_companion || args.declared_parent {
+        let key = drop_key(&args.schema, &args.vtab_name);
+        let allowed = args.chunks
+            && args.vtab_name == format!("{}_chunks", args.table)
+            && ALLOW_CREATE.lock().expect("create set").contains(&key);
+        if !allowed {
+            let which = if args.declared_companion {
+                "companion"
+            } else {
+                "parent"
+            };
+            return Err(format!("argument is not accepted: {which}"));
+        }
+    }
     if args.chunks {
         return unsafe { connect(db, argc, argv, pp_vtab, false) };
     }
@@ -279,10 +299,15 @@ fn create_shadows(
         ),
     )?;
     let parent = args_parent_literal(table);
-    sql::exec(
+    let companion_name = format!("{table}_chunks");
+    let key = drop_key(schema, &companion_name);
+    ALLOW_CREATE.lock().expect("create set").insert(key.clone());
+    let created = sql::exec(
         db,
         &format!("CREATE VIRTUAL TABLE {companion} USING ragite(companion=1, parent={parent})"),
-    )?;
+    );
+    ALLOW_CREATE.lock().expect("create set").remove(&key);
+    created?;
     Ok(())
 }
 
@@ -391,6 +416,10 @@ struct Args {
     /// Name SQLite created this virtual table under. `name MATCH` binds to it.
     vtab_name: String,
     chunks: bool,
+    /// `companion` was present in the module arguments.
+    declared_companion: bool,
+    /// `parent` was present in the module arguments.
+    declared_parent: bool,
     model: Option<String>,
 }
 
@@ -406,6 +435,8 @@ fn read_args(argc: c_int, argv: *const *const c_char) -> Result<Args, String> {
     let vtab_name = raw[2].clone();
     let mut table = vtab_name.clone();
     let mut chunks = false;
+    let mut declared_companion = false;
+    let mut declared_parent = false;
     let mut model = None;
     for arg in raw.iter().skip(3) {
         let Some((key, raw)) = split_arg(arg) else {
@@ -413,12 +444,14 @@ fn read_args(argc: c_int, argv: *const *const c_char) -> Result<Args, String> {
         };
         match key {
             "companion" => {
+                declared_companion = true;
                 if unquote(raw) != "1" {
                     return Err(format!("argument is not accepted: {arg}"));
                 }
                 chunks = true;
             }
             "parent" => {
+                declared_parent = true;
                 let value = unquote(raw);
                 if value.is_empty() {
                     return Err("parent table is empty".to_string());
@@ -443,6 +476,8 @@ fn read_args(argc: c_int, argv: *const *const c_char) -> Result<Args, String> {
         table,
         vtab_name,
         chunks,
+        declared_companion,
+        declared_parent,
         model,
     })
 }
@@ -587,6 +622,16 @@ unsafe fn destroy(vtab: *mut sqlite3_vtab) -> c_int {
         drop(Box::from_raw(vtab.cast::<Vtab>()));
     }
     SQLITE_OK
+}
+
+unsafe extern "C" fn vtab_rename(vtab: *mut sqlite3_vtab, _new_name: *const c_char) -> c_int {
+    guard(
+        SQLITE_ERROR,
+        AssertUnwindSafe(|| {
+            set_vtab_error(vtab, "rename is not accepted");
+            SQLITE_ERROR
+        }),
+    )
 }
 
 fn set_vtab_error(vtab: *mut sqlite3_vtab, msg: &str) {

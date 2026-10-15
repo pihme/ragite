@@ -12,8 +12,7 @@ use libsqlite3_sys::{
     SQLITE_DETERMINISTIC, SQLITE_ERROR, SQLITE_INNOCUOUS, SQLITE_OK, SQLITE_TRANSIENT, SQLITE_UTF8,
     sqlite3, sqlite3_context, sqlite3_context_db_handle, sqlite3_create_function_v2,
     sqlite3_create_module_v2, sqlite3_declare_vtab, sqlite3_module, sqlite3_result_blob,
-    sqlite3_result_error, sqlite3_result_text, sqlite3_value, sqlite3_vtab,
-    sqlite3_vtab_cursor,
+    sqlite3_result_error, sqlite3_result_text, sqlite3_value, sqlite3_vtab, sqlite3_vtab_cursor,
 };
 use ragite_core::{MODEL_NAME, TECHNICAL_ID, builtin_model};
 
@@ -62,9 +61,8 @@ fn register_catalog(db: *mut sqlite3) -> Result<(), String> {
     let module = catalog_module();
     for name in ["ragite_list_models", "ragite_default_model"] {
         let c_name = CString::new(name).unwrap();
-        let rc = unsafe {
-            sqlite3_create_module_v2(db, c_name.as_ptr(), module, ptr::null_mut(), None)
-        };
+        let rc =
+            unsafe { sqlite3_create_module_v2(db, c_name.as_ptr(), module, ptr::null_mut(), None) };
         if rc != SQLITE_OK {
             return Err(format!("ragite could not register {name}"));
         }
@@ -378,18 +376,21 @@ fn find_document_table(db: *mut sqlite3, table_arg: &str) -> Result<DocTable, St
         None => (None, table_arg.to_string()),
     };
     let schemas = if let Some(schema) = schema {
-        if !schema_known(db, &schema)? {
+        let Some(canonical) = canonical_schema(db, &schema)? else {
             return Err(format!("schema was not found: {schema}"));
-        }
-        vec![schema]
+        };
+        vec![canonical]
     } else {
         search_schemas(db)?
     };
     let mut found_other = false;
     for schema in schemas {
         match table_sql(db, &schema, &name)? {
-            Some(sql) if is_document_vtab(&sql) => {
-                return Ok(DocTable { schema, name });
+            Some((stored, sql)) if is_document_vtab(&sql) => {
+                return Ok(DocTable {
+                    schema,
+                    name: stored,
+                });
             }
             Some(_) => found_other = true,
             None => {}
@@ -402,8 +403,10 @@ fn find_document_table(db: *mut sqlite3, table_arg: &str) -> Result<DocTable, St
     }
 }
 
-fn schema_known(db: *mut sqlite3, schema: &str) -> Result<bool, String> {
-    Ok(database_names(db)?.iter().any(|name| name == schema))
+fn canonical_schema(db: *mut sqlite3, schema: &str) -> Result<Option<String>, String> {
+    Ok(database_names(db)?
+        .into_iter()
+        .find(|name| name.eq_ignore_ascii_case(schema)))
 }
 
 fn search_schemas(db: *mut sqlite3) -> Result<Vec<String>, String> {
@@ -431,9 +434,14 @@ fn database_names(db: *mut sqlite3) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
-fn table_sql(db: *mut sqlite3, schema: &str, name: &str) -> Result<Option<String>, String> {
+fn table_sql(
+    db: *mut sqlite3,
+    schema: &str,
+    name: &str,
+) -> Result<Option<(String, String)>, String> {
     let sql = format!(
-        "SELECT sql FROM {}.sqlite_master WHERE name = ?1 AND type = 'table'",
+        "SELECT name, ifnull(sql, '') FROM {}.sqlite_master \
+         WHERE name = ?1 COLLATE NOCASE AND type = 'table'",
         sql::quote_ident(schema)
     );
     let stmt = Stmt::prepare(db, &sql)?;
@@ -441,7 +449,10 @@ fn table_sql(db: *mut sqlite3, schema: &str, name: &str) -> Result<Option<String
     if !stmt.step()? {
         return Ok(None);
     }
-    Ok(Some(stmt.column_text(0).unwrap_or_default()))
+    Ok(Some((
+        stmt.column_text(0).unwrap_or_default(),
+        stmt.column_text(1).unwrap_or_default(),
+    )))
 }
 
 fn is_document_vtab(sql: &str) -> bool {

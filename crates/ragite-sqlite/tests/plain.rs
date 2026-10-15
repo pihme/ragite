@@ -492,3 +492,93 @@ fn tc_213_tc_214_tc_215_main_temp_and_attached() {
     assert!(archive.iter().all(|name| !name.contains('.')), "{archive:?}");
     let _ = std::fs::remove_file(&dir);
 }
+
+#[test]
+fn tc_242_rename_is_refused_and_the_old_name_still_works() {
+    let out = sql(
+        ".bail off
+         CREATE VIRTUAL TABLE docs USING ragite;
+         INSERT INTO docs(text) VALUES ('before rename');
+         ALTER TABLE docs RENAME TO docs9;
+         SELECT text FROM docs;
+         SELECT count(*) AS renamed FROM sqlite_master WHERE name GLOB 'docs9*';
+         ALTER TABLE docs_chunks RENAME TO chunks9;
+         SELECT chunk FROM docs_chunks;
+         DROP TABLE docs;
+         SELECT count(*) AS left FROM sqlite_master WHERE name GLOB 'docs*';",
+    );
+    assert!(!out.status, "rename was expected to fail: {}", out.stderr);
+    assert!(
+        out.stderr.contains("rename is not accepted"),
+        "{}",
+        out.stderr
+    );
+    let rows = parse_json(&out.stdout);
+    assert_eq!(cell(&rows, 0, "text"), "before rename");
+    assert_eq!(cell(&rows, 1, "renamed"), "0");
+    assert_eq!(cell(&rows, 2, "chunk"), "before rename");
+    assert_eq!(cell(&rows, 3, "left"), "0");
+}
+
+#[test]
+fn tc_243_caller_cannot_create_a_companion() {
+    let out = sql(
+        ".bail off
+         CREATE VIRTUAL TABLE docs USING ragite;
+         CREATE VIRTUAL TABLE evil USING ragite(companion=1, parent=docs);
+         SELECT count(*) AS n FROM sqlite_master WHERE name = 'evil';
+         CREATE VIRTUAL TABLE other USING ragite(parent=docs);
+         SELECT count(*) AS n FROM sqlite_master WHERE name = 'other';
+         SELECT count(*) AS n FROM docs;
+         SELECT count(*) AS n FROM docs_chunks;",
+    );
+    assert!(!out.status, "{}", out.stderr);
+    assert!(
+        out.stderr.contains("argument is not accepted: companion"),
+        "{}",
+        out.stderr
+    );
+    assert!(
+        out.stderr.contains("argument is not accepted: parent"),
+        "{}",
+        out.stderr
+    );
+    let rows = parse_json(&out.stdout);
+    assert_eq!(cell(&rows, 0, "n"), "0");
+    assert_eq!(cell(&rows, 1, "n"), "0");
+    assert_eq!(cell(&rows, 2, "n"), "0");
+    assert_eq!(cell(&rows, 3, "n"), "0");
+
+    let path = std::env::temp_dir().join(format!("ragite-reopen-{}", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let ext = extension_path();
+    let open = |script: &str| {
+        let mut child = Command::new("sqlite3")
+            .args(["-json", "-batch"])
+            .arg(&path)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("sqlite3");
+        use std::io::Write;
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(format!(".load {}\n{script}", ext.display()).as_bytes())
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(
+            output.status.success(),
+            "stderr: {}\nstdout: {}",
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    };
+    open("CREATE VIRTUAL TABLE docs USING ragite;\nINSERT INTO docs(text) VALUES ('hello');\n");
+    let rows = parse_json(&open("SELECT chunk FROM docs_chunks;\n"));
+    assert_eq!(cell(&rows, 0, "chunk"), "hello");
+    let _ = std::fs::remove_file(&path);
+}

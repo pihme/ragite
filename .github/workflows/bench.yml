@@ -62,6 +62,7 @@ jobs:
               --out "bench/results/quality/${{ inputs.model }}--own.json"
           fi
       - uses: actions/upload-artifact@v5
+        if: always()  # keep the datasets that finished when a later one fails
         with:
           name: bench-${{ inputs.model }}
           path: bench/results/

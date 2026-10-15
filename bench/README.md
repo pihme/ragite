@@ -6,7 +6,7 @@ Prepared, not yet run. Chooses the default Model among the 11 candidates in SPEC
 
 `bench/preround/fetch_mteb.py` reads published scores from the data behind the MTEB leaderboard and writes [`preround/mteb_scores.md`](preround/mteb_scores.md) with source commit and date. Leaderboard scores are full-precision PyTorch runs, so they only pre-select; the finalists are measured again through ragite.
 
-Proposed finalists (maintainer decides): bge-small-en-v1.5, e5-small-v2, nomic-embed-text-v1.5, multilingual-e5-small (best German score among small models), plus potion-base-8M as the current default and speed baseline.
+Proposed finalists (maintainer decides): bge-small-en-v1.5, e5-small-v2, nomic-embed-text-v1.5, multilingual-e5-small, plus potion-base-8M as the speed baseline. Decision after the Model2Vec run: potion-retrieval-32M is the built-in default.
 
 ## 2. Parity per finalist
 
@@ -14,7 +14,7 @@ Proposed finalists (maintainer decides): bge-small-en-v1.5, e5-small-v2, nomic-e
 
 ## 3. Quality (GitHub Actions, manual)
 
-Workflow **Model benchmark** (`.github/workflows/bench.yml`, `workflow_dispatch`), one Model per run. Datasets: MTEB SciFact, NFCorpus, FiQA2018 (English, the default and the quality mean), optionally GermanQuAD-Retrieval, plus the own set in [`questions/`](questions/README.md). Metrics nDCG@10 and Recall@10, each `hybrid` (`MATCH`) and `vector` (KNN on `<name>_vec` only). Pin dataset revisions with `--revision` for the published run.
+Workflow **Model benchmark** (`.github/workflows/bench.yml`, `workflow_dispatch`), one Model per run. Datasets: MTEB SciFact, NFCorpus, FiQA2018 (English only), plus the own set in [`questions/`](questions/README.md). Metrics nDCG@10 and Recall@10, each `hybrid` (`MATCH`) and `vector` (KNN on `<name>_vec` only). Pin dataset revisions with `--revision` for the published run.
 
 ## 4. CPU costs (fixed machine)
 
@@ -28,7 +28,7 @@ Workflow **Model benchmark** (`.github/workflows/bench.yml`, `workflow_dispatch`
 
 ### Start a quality run (GitHub Actions)
 
-Inputs of **Model benchmark**: `model` (a `name` from `candidates.toml`), `datasets` (space-separated MTEB ids, default the three English sets; add `mteb/germanquad-retrieval` for German), `max_docs` (corpus subsample for a dry run; empty = full).
+Inputs of **Model benchmark**: `model` (a `name` from `candidates.toml`), `datasets` (space-separated MTEB ids, default SciFact, NFCorpus, FiQA), `max_docs` (corpus subsample for a dry run; empty = full).
 
 ```sh
 gh workflow run bench.yml -f model=potion-base-8M
@@ -56,7 +56,18 @@ Costs only mean something on a quiet machine, one Model at a time. Large Models 
 - `bench/results/costs/<model>.json`: binary and DB size, peak RSS, chunks/s, query latency p50/p95, machine.
 - `python3 bench/pareto.py bench/results` writes `bench/RESULTS.md`.
 
-In the table, quality is the mean hybrid nDCG@10 over the English datasets (English has priority); GermanQuAD, when run, is a separate column and does not affect quality or the front; the vector column shows what the embedding alone contributes (hybrid minus vector is what full-text search adds). A Model is on the **Pareto front** when no other Model is at least as good in quality and at least as cheap in chunks/s and binary size, and strictly better in one. Off-front Models are dominated; pick the smallest front Model whose quality is close to the best.
+In the table, quality is the mean hybrid nDCG@10 over all datasets; the vector column shows what the embedding alone contributes (hybrid minus vector is what full-text search adds). A Model is on the **Pareto front** when no other Model is at least as good in quality and at least as cheap in chunks/s and binary size, and strictly better in one. Off-front Models are dominated; pick the smallest front Model whose quality is close to the best.
+
+## Why hybrid is close to vector-only
+
+In the results, hybrid and vector-only nDCG@10 are nearly equal, and Recall@10 on SciFact is identical. That is expected, not a bug: per REQ-75/REQ-61 the FTS5 side searches the whole query as one exact phrase, and benchmark questions almost never occur verbatim in a document. Check on SciFact with potion-base-8M (300 queries, 23,246 Chunks, all in the FTS index):
+
+| FTS query form | queries with FTS hits | FTS-only nDCG@10 | hybrid nDCG@10 / Recall@10 |
+| --- | --- | --- | --- |
+| exact phrase (ragite, REQ-75) | 1 / 300 | 0.0033 | 0.5255 / 0.6638 |
+| OR of terms (plain BM25, for comparison) | 300 / 300 | 0.6093 | 0.6200 / 0.7799 |
+
+The FTS leg helps only for queries that quote document text verbatim. Exact-phrase search is kept by design; the numbers measure the vector Model.
 
 ## Known gap
 

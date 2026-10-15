@@ -110,6 +110,23 @@ mod tests {
     }
 
     #[test]
+    fn tc_256_document_score_keeps_the_higher_score_seen_later() {
+        let chunks = [
+            FusedChunk {
+                chunk_id: 2,
+                doc_id: 4,
+                score: 1.0 / 61.0,
+            },
+            FusedChunk {
+                chunk_id: 1,
+                doc_id: 4,
+                score: 2.0 / 61.0,
+            },
+        ];
+        assert_eq!(best_document_scores(&chunks), vec![(4, 2.0 / 61.0)]);
+    }
+
+    #[test]
     fn tc_111_equal_scores_break_by_doc_id_then_chunk_id() {
         let mut chunks = vec![
             FusedChunk {

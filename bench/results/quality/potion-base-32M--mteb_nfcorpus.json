@@ -1,0 +1,28 @@
+{
+ "model": "potion-base-32M@1e5a03f8eeb2c98b928fbbd846f22f816360919f",
+ "dataset": {
+  "id": "mteb/nfcorpus",
+  "revision": "main",
+  "skipped_empty_docs": 0
+ },
+ "docs": 3633,
+ "queries": 323,
+ "chunks": 17043,
+ "index_seconds": 3.754,
+ "chunks_per_second": 4539.6,
+ "commit": "e3ddacbf9b4bc7f2e4a4f2ea7e90114fb7039300",
+ "modes": {
+  "hybrid": {
+   "ndcg@10": 0.3107,
+   "recall@10": 0.1498,
+   "latency_ms_p50": 11.91,
+   "latency_ms_p95": 12.22
+  },
+  "vector": {
+   "ndcg@10": 0.2939,
+   "recall@10": 0.1386,
+   "latency_ms_p50": 11.55,
+   "latency_ms_p95": 11.75
+  }
+ }
+}

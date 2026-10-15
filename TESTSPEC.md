@@ -2,7 +2,7 @@
 
 Status: draft, pre-1.0. Nothing here is implemented yet. Cases carry stable IDs (`TC-n`). Future tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-249 and TC-251 through TC-254. TC-250 belongs to an open pull request and is not listed in this revision.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-249 and TC-251 through TC-265. TC-250 belongs to an open pull request and is not listed in this revision.
 
 ## Conventions
 
@@ -98,6 +98,7 @@ Unless a case says otherwise:
 - **TC-33** `docs_chunks` exposes `chunk`, `doc_id`, `source`, `start`, `end`, `heading_path`, `meta_json`, and `score`.
 - **TC-34** `heading_path` is a JSON array of strings, outermost first.
 - **TC-35** A plain-text Chunk has `heading_path` `[]`. A Chunk whose format is not a DoclingDocument has `meta_json` NULL.
+- **TC-258** `heading_path_json` of an empty path is `[]`. Titles `A` then `B` encode as `["A","B"]`. A title `say "hi"` encodes as `["say \"hi\""]`.
 
 ## REQ-17
 
@@ -307,12 +308,15 @@ Unless a case says otherwise:
 - **TC-139** Under a Markdown heading, the heading is one Chunk and the following paragraph is another. The heading Chunk's path is the headings above it. The paragraph's path includes that heading. The same split holds for `<h1>Title</h1><p>Body</p>`: chunk texts `Title` and `Body`.
 - **TC-140** Once `L` is recorded, a heading whose line or visible text is longer than `L` is still one Chunk.
 - **TC-141** Markdown `# ` (a mark, a space, and no title) produces no Chunk. HTML `<h1></h1>` and `<h2>   </h2>` produce no Chunk.
+- **TC-255** `<h1>A</h1><h2>B</h2><h3>C</h3><h4>D</h4><h5>E</h5><h6>F</h6><p>G</p>` produces seven Chunks, `A` through `G`. The path of `A` is empty. Each later heading's path is only the headings above it. The path of `G` is `A`, `B`, `C`, `D`, `E`, `F`.
+- **TC-262** In `<div><h1>T</h1></div> after`, the heading Chunk is `T` with an empty path, and the following text is a Chunk `after` whose path is `T`.
 
 ## REQ-51
 
 - **TC-142** A Docling text item uses its `text` field as the item string.
 - **TC-143** A table with cells `A`, empty, `C`, `D` in reading order, two columns, becomes the item string `A\t\nC\tD`. The caption is not appended to that string. The caption text item is its own Chunk.
 - **TC-144** A key-value item with pairs (`name`, `ada`) and (`role`, `admin`) becomes `name\tada\nrole\tadmin`.
+- **TC-257** Two pairs linked by `to_key`, with keys listed as `name` then `role` and values listed as `admin` then `ada`, still become `name\tada\nrole\tadmin`. Zipping the two lists in that cell order would swap the values. The link, not that zip, chooses the value.
 - **TC-145** A picture item contributes no Chunk for its image bytes, a placeholder, or a URI. Its caption text item is a Chunk.
 
 ## REQ-52
@@ -350,6 +354,8 @@ Unless a case says otherwise:
 - **TC-165** Each of `p`, `li`, `pre`, `blockquote`, `td`, `th`, and `textarea` produces its own paragraph Chunk. `<th>A</th><td>B</td>` produces `A` and `B`. The heading path still comes only from `h1`–`h6`.
 - **TC-166** `<div>before <p>in</p> after</div>` produces a Chunk for the loose text and a Chunk `in`. The loose-text Chunk's visible text is `before after`. `<ul>`, `<ol>`, `<table>`, `<tr>`, and `<div>` are not themselves paragraph Chunks of their descendants' text.
 - **TC-167** `<img alt="hidden"><p title="nope">Yes</p>` produces one Chunk, `Yes`.
+- **TC-263** `<div><em>a</em> b</div>` is one Chunk, `a b`. `<div>a</div>b` is two Chunks, `a` and `b`.
+- **TC-264** `<p title="a>b">c</p>` is one Chunk, `c`. The attribute value is not Chunk text.
 
 ## REQ-56
 
@@ -425,6 +431,7 @@ Unless a case says otherwise:
 ## REQ-69
 
 - **TC-199** `ragite_embed` and `ragite_embed_model` return a BLOB of little-endian IEEE-754 float32 values, with no header. Its length is 4 times the Model's dimension.
+- **TC-259** The built-in Model's `dimension()` is the dimension recorded in SPEC section 8.1 (`crate::DIMENSION`, 512 for potion-retrieval-32M). An embedding of that Model has that many floats.
 
 ## REQ-70
 
@@ -476,6 +483,7 @@ Unless a case says otherwise:
 
 - **TC-219** `<!-- raw &amp; <b>no</b>\n-->` is one Chunk whose text is ` raw &amp; <b>no</b>\n`. The body is not parsed as HTML and `&amp;` is not decoded. `start` and `end` cover the whole comment, from `<` of `<!--` through `>` of `-->`.
 - **TC-220** `<!---->` produces no Chunk. `<!DOCTYPE html>` produces no Chunk. `<?note ?>` produces no Chunk.
+- **TC-265** `<!DOCTYPE html><p>Hi</p>` produces one Chunk, `Hi`. The doctype is not a Chunk and does not swallow the paragraph. `<!DOCTYPE "a>b"><p>Hi</p>` is also just `Hi`: a `>` inside a quoted declaration does not end it.
 - **TC-221** `<p>A<!--x-->B</p>` has a paragraph Chunk `AB` and a comment Chunk `x`. The paragraph text does not contain `x`.
 - **TC-222** Once `L` is recorded, a comment longer than `L` is still one Chunk. Its heading path is the headings above it.
 
@@ -483,6 +491,7 @@ Unless a case says otherwise:
 
 - **TC-223** A Chunk at rank 1 of a list contributes `1/61`. A Chunk at rank 2 contributes `1/62`. A Chunk at rank 1 on both lists scores `2/61`. A Chunk at rank 1 on one list and absent from the other scores `1/61`.
 - **TC-224** A Document whose Chunk Scores are `2/61` and `1/61` has Document Score `2/61`.
+- **TC-256** Those same two Scores still produce Document Score `2/61` when the Chunk with `1/61` is seen first.
 
 ## REQ-81
 
@@ -514,6 +523,8 @@ Unless a case says otherwise:
 - **TC-235** `<p>&amp; &#65; &#x42; &unknown;</p>` has chunk text `& A B &unknown;`.
 - **TC-236** `<!-- &amp; -->` has chunk text ` &amp; `. `<p>&lt;!-- not --&gt;</p>` is a paragraph whose visible text is `<!-- not -->`, and it is not a comment Chunk.
 - **TC-248** `<p>&#128; &#150; &#0; &#xD800; &#1114112;</p>` has chunk text `€ – U+FFFD U+FFFD U+FFFD`. `&#128;` is U+20AC, `&#150;` is U+2013, and `&#0;`, the surrogate `&#xD800;`, and `&#1114112;` are each U+FFFD. `<!-- &#128; -->` keeps the reference as written.
+- **TC-260** `&#1114111;` is U+10FFFF. A code point past U+10FFFF is U+FFFD (TC-248); this last valid code point is not.
+- **TC-261** `<p>&notin x</p>` has chunk text U+00AC, then `in x`. The name `notin` needs a semicolon. Without one, only the legacy name `not` is decoded.
 
 ## REQ-87
 

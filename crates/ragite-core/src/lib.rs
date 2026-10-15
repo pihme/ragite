@@ -22,10 +22,10 @@ pub const CHUNK_LIMIT: usize = 512;
 pub const FUSION_DEPTH: usize = 50;
 
 #[cfg(feature = "builtin-model")]
-pub const MODEL_NAME: &str = "potion-base-8M";
+pub const MODEL_NAME: &str = "potion-retrieval-32M";
 
 #[cfg(feature = "builtin-model")]
-pub const TECHNICAL_ID: &str = "potion-base-8M@bf8b056651a2c21b8d2565580b8569da283cab23";
+pub const TECHNICAL_ID: &str = "potion-retrieval-32M@6fc8051fab2a1e0ee76689cf08c853792ac285e7";
 
 #[cfg(ragite_provider_model)]
 pub const MODEL_NAME: &str = env!("RAGITE_COMPILED_NAME");
@@ -43,8 +43,8 @@ pub const MODEL_NAME: &str = "";
 #[cfg(all(not(feature = "builtin-model"), not(ragite_provider_model)))]
 pub const TECHNICAL_ID: &str = "";
 
-/// Dimension of the built-in potion-base-8M model. A provider model uses the dimension of its own weights.
-pub const DIMENSION: usize = 256;
+/// Dimension of the built-in potion-retrieval-32M model. A provider model uses the dimension of its own weights.
+pub const DIMENSION: usize = 512;
 
 /// SHA-256 of the UTF-8 bytes of `text`, as 64 lowercase hex characters.
 pub fn sha256_hex(text: &str) -> String {
@@ -67,6 +67,19 @@ pub fn heading_path_json(titles: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tc_258_heading_path_json_escapes() {
+        assert_eq!(heading_path_json(&[]), "[]");
+        assert_eq!(
+            heading_path_json(&["A".to_string(), "B".to_string()]),
+            r#"["A","B"]"#
+        );
+        assert_eq!(
+            heading_path_json(&["say \"hi\"".to_string()]),
+            r#"["say \"hi\""]"#
+        );
+    }
 
     #[test]
     fn tc_90_sha256_of_hello() {

@@ -22,14 +22,15 @@ jobs:
         with:
           lfs: true
 
-      - name: Require the smudged model weights
+      - name: Require the smudged model files
         run: |
-          file=models/potion-base-8M/model.safetensors
-          test -s "$file"
-          if head -c 40 "$file" | grep -q 'git-lfs'; then
-            echo "model weights are still a Git LFS pointer"
-            exit 1
-          fi
+          for file in models/*/model.safetensors models/*/tokenizer.json; do
+            test -s "$file"
+            if head -c 40 "$file" | grep -q 'git-lfs'; then
+              echo "model file is still a Git LFS pointer: $file (check out with lfs: true / git lfs pull)"
+              exit 1
+            fi
+          done
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -114,6 +115,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          # release-plz may compile ragite-core; build.rs rejects LFS pointer files.
+          lfs: true
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
@@ -140,14 +143,15 @@ jobs:
           lfs: true
           persist-credentials: false
 
-      - name: Require the smudged model weights
+      - name: Require the smudged model files
         run: |
-          file=models/potion-base-8M/model.safetensors
-          test -s "$file"
-          if head -c 40 "$file" | grep -q 'git-lfs'; then
-            echo "model weights are still a Git LFS pointer"
-            exit 1
-          fi
+          for file in models/*/model.safetensors models/*/tokenizer.json; do
+            test -s "$file"
+            if head -c 40 "$file" | grep -q 'git-lfs'; then
+              echo "model file is still a Git LFS pointer: $file (check out with lfs: true / git lfs pull)"
+              exit 1
+            fi
+          done
 
       - uses: dtolnay/rust-toolchain@stable
 

@@ -19,7 +19,7 @@ import urllib.error
 import urllib.request
 
 REPO = "embeddings-benchmark/results"
-TASKS = ["SciFact", "NFCorpus", "FiQA2018", "GermanQuAD-Retrieval"]
+TASKS = ["SciFact", "NFCorpus", "FiQA2018"]
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
@@ -65,7 +65,7 @@ def main() -> None:
         "Metric: nDCG@10 on the test split (dev if there is no test split). `-` means no published result.",
         "Revision `external` means the score was reported by the model author, not rerun by MTEB.",
         "",
-        "| Model | " + " | ".join(TASKS) + " | Mean (EN) | Revision |",
+        "| Model | " + " | ".join(TASKS) + " | Mean | Revision |",
         "| --- | " + " | ".join("---" for _ in TASKS) + " | --- | --- |",
     ]
     for m in models:
@@ -76,8 +76,7 @@ def main() -> None:
             if r and r[0] is not None:
                 cells.append(f"{r[0]:.4f}")
                 rev_used.add(r[2][:12])
-                if t != "GermanQuAD-Retrieval":
-                    en.append(r[0])
+                en.append(r[0])
             else:
                 cells.append("-")
         mean = f"{sum(en) / len(en):.4f}" if len(en) == 3 else "-"

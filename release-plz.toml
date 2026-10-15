@@ -1,0 +1,28 @@
+# Git-only releases. Both crates set publish = false, and the extension
+# bundles vendored weights, so nothing is published to crates.io.
+# A push to main opens a release pull request. Merging that pull request
+# creates the tags and the GitHub Release.
+
+[workspace]
+git_only = true
+release_always = false
+semver_check = false
+# feat bumps minor before 1.0, matching the rule in AGENTS.md.
+# A breaking change before 1.0 still bumps minor. Choose 1.0.0 by editing
+# the version in the release pull request.
+features_always_increment_minor = true
+repo_url = "https://github.com/pihme/ragite"
+
+[[package]]
+name = "ragite-core"
+version_group = "ragite"
+# Tag only, so the next release can see this crate's last version.
+git_release_enable = false
+git_tag_name = "ragite-core/v{{ version }}"
+
+[[package]]
+name = "ragite-sqlite"
+version_group = "ragite"
+git_tag_name = "ragite/v{{ version }}"
+git_release_name = "ragite {{ version }}"
+changelog_include = ["ragite-core"]

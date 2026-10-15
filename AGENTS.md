@@ -16,7 +16,7 @@ License: **MIT OR Apache-2.0** (dual, Rust convention; `LICENSE-MIT`, `LICENSE-A
 <!-- TODO: stack and runtime versions, layout (one line per directory), invariants that must not break, what the tests cover. -->
 
 - Tests: `make test` must pass before anything lands on `main`. Tests stay offline: no real accounts, tokens or live services.
-- Release paths (only commits touching them can cut a release) are listed in `.github/release.json`.
+- **Releases use release-plz, not `release.py`.** There is no `.github/release.json`. Config: `release-plz.toml`. Both crates stay `publish = false` (`git_only`): nothing goes to crates.io. After CI passes on a push to `main`, release-plz opens a release pull request that bumps the crate versions and writes the changelogs. Merging that pull request tags `ragite/vX.Y.Z` for `ragite-sqlite` and `ragite-core/vX.Y.Z` for `ragite-core`, creates the GitHub Release named `ragite X.Y.Z`, and attaches `libragite.so`, `LICENSE-MIT`, `LICENSE-APACHE`, and `THIRD_PARTY_NOTICES.md`. `feat:` bumps minor even before 1.0. A breaking change before 1.0 bumps minor. Choose 1.0.0 by editing the version in the release pull request. Do not tag, bump versions, or create releases by hand. The "Versions and releases" shared rules below describe the family default; this paragraph is the one that applies in this repo.
 
 ## Shared rules
 

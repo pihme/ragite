@@ -49,3 +49,86 @@ jobs:
 
       - name: Test
         run: make test
+
+  # Open or update the release pull request after tests pass on main.
+  release-plz-pr:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository_owner == 'pihme'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Open the release pull request
+        uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Tag and publish the GitHub Release only when that pull request merges.
+  release-plz-release:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository_owner == 'pihme'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          lfs: true
+          persist-credentials: false
+
+      - name: Require the smudged model weights
+        run: |
+          file=models/potion-base-8M/model.safetensors
+          test -s "$file"
+          if head -c 40 "$file" | grep -q 'git-lfs'; then
+            echo "model weights are still a Git LFS pointer"
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Cut the release
+        id: release
+        uses: release-plz/action@v0.5
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Attach the extension
+        if: steps.release.outputs.releases_created == 'true'
+        env:
+          RELEASES: ${{ steps.release.outputs.releases }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=$(printf '%s' "$RELEASES" | jq -r '.[] | select(.package_name == "ragite-sqlite") | .tag')
+          if [ -z "$tag" ] || [ "$tag" = "null" ]; then
+            echo "ragite-sqlite was not released"
+            exit 0
+          fi
+          env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
+            cargo build -p ragite-sqlite --release
+          gh release upload "$tag" \
+            target/release/libragite.so \
+            LICENSE-MIT \
+            LICENSE-APACHE \
+            THIRD_PARTY_NOTICES.md \
+            --clobber

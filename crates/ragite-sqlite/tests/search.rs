@@ -5,7 +5,7 @@ mod common;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use common::{Out, cell, err, extension_path, ok, parse_json};
+use common::{Out, cell, err, extension_path, ok, parse_json, sql};
 
 fn score(rows: &serde_json::Value, index: usize) -> f64 {
     cell(rows, index, "score").parse().expect("score")
@@ -291,4 +291,163 @@ fn tc_227_match_column_does_not_change_the_search() {
     assert_eq!(filtered.as_array().unwrap().len(), 2);
     assert_eq!(cell(&filtered, 0, "source"), "keep");
     assert_eq!(cell(&filtered, 1, "source"), "drop");
+}
+
+fn plan_text(script: &str) -> String {
+    let out = sql(script);
+    assert!(
+        out.status,
+        "explain failed\nstderr: {}\nstdout: {}",
+        out.stderr, out.stdout
+    );
+    out.stdout
+}
+
+#[test]
+fn tc_251_to_254_rowid_equality_is_a_unique_lookup() {
+    let setup = "CREATE VIRTUAL TABLE docs USING ragite;
+         INSERT INTO docs(text, source) VALUES ('alpha unique', 'a');
+         INSERT INTO docs(text, source) VALUES ('beta other', 'b');";
+
+    let hit = ok(&format!(
+        "{setup}
+         SELECT chunk, doc_id, source, score FROM docs_chunks WHERE rowid = 2;
+         SELECT text, source, score FROM docs WHERE rowid = 2;"
+    ));
+    assert_eq!(cell(&hit, 0, "chunk"), "beta other");
+    assert_eq!(cell(&hit, 0, "doc_id"), "2");
+    assert_eq!(cell(&hit, 0, "source"), "b");
+    assert!(hit.as_array().unwrap()[0]["score"].is_null());
+    assert_eq!(cell(&hit, 1, "text"), "beta other");
+    assert_eq!(cell(&hit, 1, "source"), "b");
+    assert!(hit.as_array().unwrap()[1]["score"].is_null());
+
+    let fractional = ok(&format!(
+        "{setup}
+         SELECT rowid AS id FROM docs_chunks WHERE rowid = 2.5;
+         SELECT rowid AS id FROM docs WHERE rowid = 2.5;
+         SELECT rowid AS id FROM docs_chunks WHERE rowid = '2.5';
+         SELECT rowid AS id FROM docs WHERE rowid = '2.5';"
+    ));
+    assert!(
+        fractional.as_array().unwrap().is_empty(),
+        "non-integral rowid returned {fractional}"
+    );
+    let fractional_plan = plan_text(&format!(
+        "{setup}
+         EXPLAIN QUERY PLAN SELECT chunk FROM docs_chunks WHERE rowid = 2.5;"
+    ));
+    assert!(
+        fractional_plan.contains("INDEX 2:rowid"),
+        "non-integral plan: {fractional_plan}"
+    );
+
+    let integral = ok(&format!(
+        "{setup}
+         SELECT rowid AS id FROM docs_chunks WHERE rowid = 2.0;
+         SELECT rowid AS id FROM docs WHERE rowid = 2.0;
+         SELECT rowid AS id FROM docs_chunks WHERE rowid = '2';
+         SELECT rowid AS id FROM docs WHERE rowid = '2';"
+    ));
+    assert_eq!(integral.as_array().unwrap().len(), 4);
+    for index in 0..4 {
+        assert_eq!(cell(&integral, index, "id"), "2");
+    }
+
+    // An empty MATCH returns no rows (REQ-43). A rowid-only plan would still
+    // return the chunk, so this locks the search plan when both are usable.
+    let matched = ok(&format!(
+        "{setup}
+         SELECT chunk FROM docs_chunks WHERE rowid = 2 AND docs_chunks MATCH '';"
+    ));
+    assert!(matched.as_array().unwrap().is_empty());
+    let match_plan = plan_text(&format!(
+        "{setup}
+         EXPLAIN QUERY PLAN
+         SELECT chunk FROM docs_chunks WHERE rowid = 2 AND docs_chunks MATCH 'alpha unique';"
+    ));
+    assert!(
+        match_plan.contains("INDEX 1:"),
+        "match-and-rowid plan: {match_plan}"
+    );
+    assert!(
+        !match_plan.contains("INDEX 2:"),
+        "match-and-rowid used the rowid plan: {match_plan}"
+    );
+
+    let missing = ok(&format!(
+        "{setup}
+         SELECT chunk FROM docs_chunks WHERE rowid = 99;
+         SELECT text FROM docs WHERE rowid = 99;"
+    ));
+    assert!(missing.as_array().unwrap().is_empty());
+
+    let scan = ok(&format!(
+        "{setup}
+         SELECT chunk FROM docs_chunks;
+         SELECT chunk FROM docs_chunks WHERE rowid > 1;"
+    ));
+    assert_eq!(cell(&scan, 0, "chunk"), "alpha unique");
+    assert_eq!(cell(&scan, 1, "chunk"), "beta other");
+    assert_eq!(cell(&scan, 2, "chunk"), "beta other");
+    assert_eq!(scan.as_array().unwrap().len(), 3);
+
+    let lookup_plan = plan_text(&format!(
+        "{setup}
+         EXPLAIN QUERY PLAN SELECT chunk FROM docs_chunks WHERE rowid = 2;"
+    ));
+    assert!(
+        lookup_plan.contains("INDEX 2:rowid"),
+        "point lookup plan: {lookup_plan}"
+    );
+
+    let scan_plan = plan_text(&format!(
+        "{setup}
+         EXPLAIN QUERY PLAN SELECT chunk FROM docs_chunks;"
+    ));
+    assert!(
+        scan_plan.contains("INDEX 0:"),
+        "full scan plan: {scan_plan}"
+    );
+    assert!(
+        !scan_plan.contains("INDEX 2:"),
+        "full scan used the rowid plan: {scan_plan}"
+    );
+
+    let range_plan = plan_text(&format!(
+        "{setup}
+         EXPLAIN QUERY PLAN SELECT chunk FROM docs_chunks WHERE rowid > 1;"
+    ));
+    assert!(
+        range_plan.contains("INDEX 0:"),
+        "inequality plan: {range_plan}"
+    );
+    assert!(
+        !range_plan.contains("INDEX 2:"),
+        "inequality used the rowid plan: {range_plan}"
+    );
+
+    let join = ok(&format!(
+        "{setup}
+         SELECT c.chunk AS chunk
+         FROM docs_vec v
+         JOIN docs_chunks c ON c.rowid = v.rowid
+         WHERE v.embedding MATCH (SELECT embedding FROM docs_vec WHERE rowid = 2)
+           AND k = 1;"
+    ));
+    assert_eq!(cell(&join, 0, "chunk"), "beta other");
+
+    let join_plan = plan_text(&format!(
+        "{setup}
+         EXPLAIN QUERY PLAN
+         SELECT c.chunk
+         FROM docs_vec v
+         JOIN docs_chunks c ON c.rowid = v.rowid
+         WHERE v.embedding MATCH (SELECT embedding FROM docs_vec WHERE rowid = 2)
+           AND k = 1;"
+    ));
+    assert!(
+        join_plan.contains("INDEX 2:rowid"),
+        "knn join plan: {join_plan}"
+    );
 }

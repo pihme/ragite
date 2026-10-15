@@ -689,6 +689,30 @@ mod tests {
     }
 
     #[test]
+    fn tc_257_to_key_links_win_over_cell_order() {
+        let doc = serde_json::json!({
+            "schema_name": "DoclingDocument",
+            "key_value_items": [{
+                "self_ref": "#/key_value_items/0",
+                "graph": {
+                    "cells": [
+                        {"cell_id": 1, "label": "key", "text": "name"},
+                        {"cell_id": 2, "label": "key", "text": "role"},
+                        {"cell_id": 3, "label": "value", "text": "admin"},
+                        {"cell_id": 4, "label": "value", "text": "ada"}
+                    ],
+                    "links": [
+                        {"label": "to_key", "source_cell_id": 4, "target_cell_id": 1},
+                        {"label": "to_key", "source_cell_id": 3, "target_cell_id": 2}
+                    ]
+                }
+            }],
+            "body": {"children": [{"$ref": "#/key_value_items/0"}]}
+        });
+        assert_eq!(texts(&cut(&doc.to_string())), vec!["name\tada\nrole\tadmin"]);
+    }
+
+    #[test]
     fn tc_145_picture_contributes_no_image_uri_or_placeholder() {
         let doc = serde_json::json!({
             "schema_name": "DoclingDocument",

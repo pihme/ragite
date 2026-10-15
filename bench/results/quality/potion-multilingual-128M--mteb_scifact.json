@@ -1,0 +1,28 @@
+{
+ "model": "potion-multilingual-128M@73908c3438cf03b6a01bcb9611d62b23d0726f08",
+ "dataset": {
+  "id": "mteb/scifact",
+  "revision": "main",
+  "skipped_empty_docs": 0
+ },
+ "docs": 5183,
+ "queries": 300,
+ "chunks": 23246,
+ "index_seconds": 6.951,
+ "chunks_per_second": 3344.3,
+ "commit": "e3ddacbf9b4bc7f2e4a4f2ea7e90114fb7039300",
+ "modes": {
+  "hybrid": {
+   "ndcg@10": 0.4637,
+   "recall@10": 0.6036,
+   "latency_ms_p50": 8.49,
+   "latency_ms_p95": 9.07
+  },
+  "vector": {
+   "ndcg@10": 0.4625,
+   "recall@10": 0.6036,
+   "latency_ms_p50": 7.84,
+   "latency_ms_p95": 7.99
+  }
+ }
+}

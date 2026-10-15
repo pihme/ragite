@@ -881,7 +881,7 @@ mod tests {
     }
 
     #[test]
-    fn tc_164_tc_165_tc_166_tc_167_tc_177_tc_178_paragraphs() {
+    fn tc_164_tc_165_tc_166_tc_167_tc_177_tc_178_tc_263_tc_264_paragraphs() {
         let broken = chunk_html("<p>a<br>b</p>");
         assert_eq!(broken.len(), 1);
         let at = broken[0].text.find('a').unwrap();
@@ -922,6 +922,59 @@ mod tests {
             )),
             vec!["Before after end", "Mid"]
         );
+
+        assert_eq!(texts(&chunk_html("<div><em>a</em> b</div>")), vec!["a b"]);
+        assert_eq!(texts(&chunk_html("<div>a</div>b")), vec!["a", "b"]);
+        assert_eq!(texts(&chunk_html("<p title=\"a>b\">c</p>")), vec!["c"]);
+    }
+
+    #[test]
+    fn tc_255_tc_262_deeper_headings_and_path_after_a_container() {
+        let chunks = chunk_html("<h1>A</h1><h2>B</h2><h3>C</h3><h4>D</h4><h5>E</h5><h6>F</h6><p>G</p>");
+        assert_eq!(texts(&chunks), vec!["A", "B", "C", "D", "E", "F", "G"]);
+        assert_eq!(
+            paths(&chunks),
+            vec![
+                vec![],
+                vec!["A".to_string()],
+                vec!["A".to_string(), "B".to_string()],
+                vec!["A".to_string(), "B".to_string(), "C".to_string()],
+                vec![
+                    "A".to_string(),
+                    "B".to_string(),
+                    "C".to_string(),
+                    "D".to_string(),
+                ],
+                vec![
+                    "A".to_string(),
+                    "B".to_string(),
+                    "C".to_string(),
+                    "D".to_string(),
+                    "E".to_string(),
+                ],
+                vec![
+                    "A".to_string(),
+                    "B".to_string(),
+                    "C".to_string(),
+                    "D".to_string(),
+                    "E".to_string(),
+                    "F".to_string(),
+                ],
+            ]
+        );
+
+        let after = chunk_html("<div><h1>T</h1></div> after");
+        assert_eq!(texts(&after), vec!["T", "after"]);
+        assert_eq!(
+            paths(&after),
+            vec![vec![], vec!["T".to_string()]]
+        );
+    }
+
+    #[test]
+    fn tc_265_doctype_does_not_swallow_the_following_paragraph() {
+        assert_eq!(texts(&chunk_html("<!DOCTYPE html><p>Hi</p>")), vec!["Hi"]);
+        assert_eq!(texts(&chunk_html("<!DOCTYPE \"a>b\"><p>Hi</p>")), vec!["Hi"]);
     }
 
     #[test]
@@ -991,13 +1044,18 @@ mod tests {
     }
 
     #[test]
-    fn tc_235_tc_236_character_references() {
+    fn tc_235_tc_236_tc_260_tc_261_character_references() {
         assert_eq!(
             texts(&chunk_html("<p>&amp; &#65; &#x42; &unknown;</p>")),
             vec!["& A B &unknown;"]
         );
         assert_eq!(texts(&chunk_html("<!-- &amp; -->")), vec![" &amp; "]);
         assert_eq!(texts(&chunk_html("<p>&#65 &#x42</p>")), vec!["A B"]);
+        assert_eq!(
+            texts(&chunk_html("<p>&#1114111;</p>")),
+            vec!["\u{10FFFF}"]
+        );
+        assert_eq!(texts(&chunk_html("<p>&notin x</p>")), vec!["\u{ac}in x"]);
         assert_eq!(texts(&chunk_html("<p>&amp x</p>")), vec!["& x"]);
         assert_eq!(texts(&chunk_html("<p>&notit;</p>")), vec!["\u{ac}it;"]);
         assert_eq!(texts(&chunk_html("<p>&notin;</p>")), vec!["\u{2209}"]);

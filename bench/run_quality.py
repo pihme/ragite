@@ -41,11 +41,14 @@ def load_mteb(name: str, revision: str | None, max_docs: int | None):
         if float(r["score"]) > 0:
             rel.setdefault(str(r["query-id"]), set()).add(str(r["corpus-id"]))
     docs = [(str(d["_id"]), ((d.get("title") or "") + "\n\n" + d["text"]).strip()) for d in corpus]
+    # ragite rejects empty text; FiQA has corpus entries with no title and no text.
+    empty = sum(1 for d in docs if not d[1])
+    docs = [d for d in docs if d[1]]
     if max_docs:  # keep every relevant doc, then fill up
         needed = set().union(*rel.values())
         docs = [d for d in docs if d[0] in needed] + [d for d in docs if d[0] not in needed][: max(0, max_docs - len(needed))]
     qs = [(str(q["_id"]), q["text"]) for q in queries if str(q["_id"]) in rel]
-    return docs, qs, rel, {"id": name, "revision": revision or "main"}
+    return docs, qs, rel, {"id": name, "revision": revision or "main", "skipped_empty_docs": empty}
 
 
 def load_own(path: pathlib.Path):
@@ -105,7 +108,10 @@ def main() -> None:
     modes = {
         "hybrid": "SELECT source FROM docs_chunks WHERE docs_chunks MATCH ? LIMIT %d" % depth,
         "vector": (
-            "SELECT c.source FROM docs_vec v JOIN docs_chunks c ON c.rowid = v.rowid "
+            # Join the indexed shadow tables, not docs_chunks: that virtual table
+            # has no rowid lookup, so a join to it scans every Chunk per hit.
+            "SELECT d.source FROM docs_vec v JOIN docs_chunk_rows c ON c.chunk_id = v.rowid "
+            "JOIN docs_documents d ON d.doc_id = c.doc_id "
             "WHERE v.embedding MATCH ragite_embed('docs', ?, 'query') AND k = %d ORDER BY v.distance" % depth
         ),
     }

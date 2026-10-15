@@ -254,9 +254,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ```
 
-### potion-base-8M
+### potion-retrieval-32M
 
-The bundled weights are Hugging Face `minishlab/potion-base-8M` at commit `bf8b056651a2c21b8d2565580b8569da283cab23`. Files in `models/potion-base-8M/`: `config.json`, `tokenizer.json`, `model.safetensors`. The ONNX file from that revision is not bundled.
+The bundled weights are Hugging Face `minishlab/potion-retrieval-32M` at commit `6fc8051fab2a1e0ee76689cf08c853792ac285e7`. Files in `models/potion-retrieval-32M/`: `config.json`, `tokenizer.json`, `model.safetensors`. The ONNX file from that revision is not bundled.
+
+That revision's file list has no LICENSE file. The model card `README.md` front matter says `license: mit`. The citation block in that card says `license = {MIT}`. The Hugging Face model record `cardData.license` is `mit`.
+
+### potion-base-8M (test fixture, not in the built extension)
+
+The repository also keeps Hugging Face `minishlab/potion-base-8M` at commit `bf8b056651a2c21b8d2565580b8569da283cab23` in `models/potion-base-8M/` for the provider-Model tests. It is not embedded in the default build.
 
 That revision's file list has no LICENSE file. The model card `README.md` front matter says `license: mit`. The citation block in that card says `license = {MIT}`. The Hugging Face model record `cardData.license` is `mit`.
 
@@ -590,3 +596,5 @@ SOFTWARE.
 `make test` also runs Python 3, Node.js, and Go. Python uses its standard-library `sqlite3` module. Node.js uses its built-in `node:sqlite` module. The Go test is cgo linked to the host `libsqlite3` and does not download modules. Those programs are not part of ragite, and the tests do not install a ragite package.
 
 The manual Fuzz workflow installs `cargo-fuzz` 0.13.2 and runs it. That crate's `Cargo.toml` says `license = "MIT OR Apache-2.0"`. It is not part of the extension.
+
+The manual workflow `.github/workflows/mutants.yml` installs `cargo-mutants` 27.1.0 and runs it against `ragite-core`. That program is not part of ragite and is not shipped. The published crate's `Cargo.toml` names the license MIT. Its `LICENSE` file states copyright 2021 Martin Pool.

@@ -24,6 +24,40 @@ Workflow **Model benchmark** (`.github/workflows/bench.yml`, `workflow_dispatch`
 
 `pareto.py bench/results` writes `RESULTS.md`: commit(s), dataset ids and revisions, own-set sha256, the table, and the Pareto front (quality vs chunks/s and binary size). Pick the smallest Model close to the front.
 
+## How to run
+
+### Start a quality run (GitHub Actions)
+
+Inputs of **Model benchmark**: `model` (a `name` from `candidates.toml`), `datasets` (space-separated MTEB ids, default all four), `max_docs` (corpus subsample for a dry run; empty = full).
+
+```sh
+gh workflow run bench.yml -f model=potion-base-8M
+gh workflow run bench.yml -f model=potion-base-32M -f datasets="mteb/scifact" -f max_docs=500   # dry run
+gh run watch "$(gh run list -w bench.yml -L 1 --json databaseId -q '.[0].databaseId')"
+gh run download <run-id> -n bench-<model> -D bench/results
+```
+
+One Model per run; start the next when the previous one is done to keep CI minutes low. The parity step runs first and fails the run before any quality numbers are produced.
+
+### Parity and costs locally
+
+```sh
+pip install -r bench/requirements.txt
+ext=$(bench/build_model.sh minishlab/potion-base-8M potion-base-8M)
+python3 bench/parity/check_parity.py --extension "$ext" --hf minishlab/potion-base-8M --kind model2vec
+bench/measure_costs.sh "$ext" bench/results/costs/potion-base-8M.json
+```
+
+Costs only mean something on a quiet machine, one Model at a time. Large Models (potion-multilingual-128M, 512 MB weights) need about 3 GB free RAM to build.
+
+## Where results land and how to read them
+
+- `bench/results/quality/<model>--<dataset>.json`: nDCG@10 and Recall@10 per mode (`hybrid`, `vector`), latency, chunks/s, dataset id and revision, commit.
+- `bench/results/costs/<model>.json`: binary and DB size, peak RSS, chunks/s, query latency p50/p95, machine.
+- `python3 bench/pareto.py bench/results` writes `bench/RESULTS.md`.
+
+In the table, quality is the mean hybrid nDCG@10 over all datasets; the vector column shows what the embedding alone contributes (hybrid minus vector is what full-text search adds). A Model is on the **Pareto front** when no other Model is at least as good in quality and at least as cheap in chunks/s and binary size, and strictly better in one. Off-front Models are dominated; pick the smallest front Model whose quality is close to the best.
+
 ## Known gap
 
 ragite loads only Model2Vec models today (`model2vec-rs`). The transformer finalists need the candle loader (REQ-22) before steps 2-4 can run for them; `build_model.sh` and the workflow will fail for them until then.

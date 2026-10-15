@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CPU costs for one Model on the fixed benchmark machine (REQ-89).
+# CPU costs for one Model on the fixed benchmark machine (REQ-92).
 # Run on the designated machine only (CI runners are too noisy), one model at a time.
 # Usage: bench/measure_costs.sh <libragite.so> <out.json>
 # Records binary size, DB size, chunks/s, query latency and peak RSS on SciFact.

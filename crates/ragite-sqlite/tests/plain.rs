@@ -318,7 +318,7 @@ fn tc_66_tc_192_fts_and_vec_definitions() {
 }
 
 #[test]
-fn tc_73_tc_74_tc_109_companion_is_read_only() {
+fn tc_73_tc_74_tc_109_tc_245_companion_is_read_only() {
     let message = err(
         "CREATE VIRTUAL TABLE docs USING ragite;
          INSERT INTO docs_chunks(chunk) VALUES ('no');",
@@ -332,6 +332,11 @@ fn tc_73_tc_74_tc_109_companion_is_read_only() {
          SELECT count(*) AS n FROM docs_chunks;",
     );
     assert!(!out.status, "drop was expected to fail: {}", out.stderr);
+    assert!(
+        out.stderr.to_ascii_lowercase().contains("logic error"),
+        "{}",
+        out.stderr
+    );
     let rows = parse_json(&out.stdout);
     assert_eq!(cell(&rows, 0, "n"), "0");
     assert_eq!(cell(&rows, 1, "n"), "0");

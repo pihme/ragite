@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Per-model parity check before the full run (REQ-89).
+"""Per-model parity check before the full run (REQ-92).
 
 Embeds the sentences in bench/parity/sentences.txt through the extension
 (`ragite_embed_model`) and through the upstream reference (model2vec for

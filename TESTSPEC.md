@@ -2,7 +2,7 @@
 
 Status: draft, pre-1.0. Nothing here is implemented yet. Cases carry stable IDs (`TC-n`). Future tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-245.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-246.
 
 ## Conventions
 
@@ -244,8 +244,6 @@ Unless a case says otherwise:
 ## REQ-40
 
 - **TC-109** `DROP TABLE docs_chunks` fails. `docs` and `docs_chunks` both still accept `SELECT`.
-- **TC-242** `ALTER TABLE docs RENAME TO docs9` fails with `rename is not accepted`. `docs` still returns the inserted text, no `docs9` table exists, and `DROP TABLE docs` removes the table. `ALTER TABLE docs_chunks RENAME` fails the same way, and `docs_chunks` still reads.
-- **TC-243** `CREATE VIRTUAL TABLE evil USING ragite(companion=1, parent=docs)` fails with `argument is not accepted: companion` and leaves no `evil` table. `CREATE VIRTUAL TABLE other USING ragite(parent=docs)` fails with `argument is not accepted: parent`. The companion ragite created for `docs` still reads after that database is opened again.
 
 ## REQ-41
 
@@ -523,4 +521,16 @@ Unless a case says otherwise:
 
 ## REQ-88
 
-- **TC-245** For every sentence in `tests/parity/reference.json`, `ragite_embed_model` with the default Model and role `passage` returns a vector of the same dimension whose cosine with the reference vector is at least 0.99. The file's `model` equals the default technical identifier.
+- **TC-243** `CREATE VIRTUAL TABLE evil USING ragite(companion=1, parent=docs)` fails with `argument is not accepted: companion` and leaves no `evil` table. `CREATE VIRTUAL TABLE other USING ragite(parent=docs)` fails with `argument is not accepted: parent`. The companion ragite created for `docs` still reads after that database is opened again.
+
+## REQ-89
+
+- **TC-242** `ALTER TABLE docs RENAME TO docs9` fails with `rename is not accepted`. `docs` still returns the inserted text, no `docs9` table exists, and `DROP TABLE docs` removes the table. `ALTER TABLE docs_chunks RENAME` fails the same way, and `docs_chunks` still reads.
+
+## REQ-90
+
+- **TC-245** `DROP TABLE docs_chunks` fails with SQLite's generic logic error. `docs` and `docs_chunks` both still accept `SELECT`.
+
+## REQ-91
+
+- **TC-246** For every sentence in `tests/parity/reference.json`, `ragite_embed_model` with the default Model and role `passage` returns a vector of the same dimension whose cosine with the reference vector is at least 0.99. The file's `model` equals the default technical identifier.

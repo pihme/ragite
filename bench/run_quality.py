@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Quality run for one Model through ragite's own path (REQ-89).
+"""Quality run for one Model through ragite's own path (REQ-92).
 
 Loads an extension built with that Model (see bench/README.md), indexes a
 retrieval dataset through `INSERT`, and scores nDCG@10 and Recall@10 in two

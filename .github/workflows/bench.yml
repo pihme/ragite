@@ -1,6 +1,6 @@
 name: Model benchmark
 
-# Quality run for one candidate Model (REQ-89). Manual only; never on push.
+# Quality run for one candidate Model (REQ-92). Manual only; never on push.
 # CPU costs are measured on the fixed benchmark machine, not here.
 on:
   workflow_dispatch:

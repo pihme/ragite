@@ -1,6 +1,6 @@
 # Model benchmark
 
-Prepared, not yet run. Chooses the default Model among the 11 candidates in SPEC.md section 8.1 (REQ-89). The run starts after the Docling heading fix from PR #11, so the own question set is chunked the way production is.
+Prepared, not yet run. Chooses the default Model among the 11 candidates in SPEC.md section 8.1 (REQ-92). The run starts after the Docling heading fix from PR #11, so the own question set is chunked the way production is.
 
 ## 1. Preround (no compute)
 

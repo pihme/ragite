@@ -12,6 +12,8 @@
 release-out/
 # Cargo
 /target
+# cargo-mutants output
+/mutants.out/
 
 bench/.models/
 bench/results/

@@ -29,3 +29,5 @@ make test
 Python 3, Node.js, and Go must be on `PATH`. The Python test uses the standard-library `sqlite3` module. The Node.js test uses `node:sqlite`. The Go test uses cgo and links the host `libsqlite3` (`libsqlite3.so.0` on Linux). Those tests load the extension built in the tree. They do not use the network and do not install a ragite package.
 
 Test cases are numbered in [TESTSPEC.md](TESTSPEC.md). Cite those numbers from the tests.
+
+Mutation tests are not part of `make test`. The manual GitHub Actions workflow `Mutation` runs `cargo mutants` 27.1.0 on `ragite-core`. It does not run on push or pull request. Outcomes are uploaded as a workflow artifact.

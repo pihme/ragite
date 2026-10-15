@@ -514,3 +514,5 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 `make test` runs the `sqlite3` command-line program and loads the ragite extension into it. That program is not part of ragite. The extension does not link a copy of SQLite.
 
 `make test` also runs Python 3, Node.js, and Go. Python uses its standard-library `sqlite3` module. Node.js uses its built-in `node:sqlite` module. The Go test is cgo linked to the host `libsqlite3` and does not download modules. Those programs are not part of ragite, and the tests do not install a ragite package.
+
+The manual workflow `.github/workflows/mutants.yml` installs `cargo-mutants` 27.1.0 and runs it against `ragite-core`. That program is not part of ragite and is not shipped. The published crate's `Cargo.toml` names the license MIT. Its `LICENSE` file states copyright 2021 Martin Pool.

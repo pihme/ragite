@@ -11,9 +11,19 @@ pub fn extension_path() -> PathBuf {
     let mut path = std::env::current_exe().expect("test executable");
     path.pop();
     path.pop();
-    path.push("libragite.so");
+    path.push(extension_file());
     assert!(path.is_file(), "missing extension at {}", path.display());
     path
+}
+
+fn extension_file() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "ragite.dll"
+    } else if cfg!(target_os = "macos") {
+        "libragite.dylib"
+    } else {
+        "libragite.so"
+    }
 }
 
 pub struct Out {
@@ -30,7 +40,8 @@ pub fn sql(script: &str) -> Out {
         .stderr(Stdio::piped())
         .spawn()
         .expect("sqlite3");
-    let full = format!(".load {}\n{script}", extension_path().display());
+    let load = extension_path().display().to_string().replace('\\', "/");
+    let full = format!(".load {load}\n{script}");
     use std::io::Write;
     child
         .stdin

@@ -545,7 +545,7 @@ Unless a case says otherwise:
 
 ## REQ-91
 
-- **TC-246** For every sentence in `tests/parity/reference.json`, `ragite_embed_model` with the default Model and role `passage` returns a vector of the same dimension whose cosine with the reference vector is at least 0.99. The file's `model` equals the default technical identifier.
+- **TC-246** For every sentence in `tests/parity/reference.json`, `ragite_embed_model` with the default Model and role `passage` returns a vector of the same dimension whose cosine with the reference vector is at least 0.99. The file's `model` equals the default technical identifier. The macOS and Windows CI jobs build the default extension and run this case.
 
 ## REQ-93
 

@@ -24,6 +24,7 @@ fn main() {
             println!("cargo:rerun-if-changed={}", file.display());
             require_real_file(&file);
         }
+        write_weights_asm(&dir.join("model.safetensors"));
     }
 
     let path = std::env::var("RAGITE_MODEL_PATH").unwrap_or_default();
@@ -67,6 +68,7 @@ fn main() {
     rustc_env("RAGITE_COMPILED_TOKENIZER", &out.join("tokenizer.json"));
     rustc_env("RAGITE_COMPILED_WEIGHTS", &out.join("model.safetensors"));
     rustc_env("RAGITE_COMPILED_CONFIG", &out.join("config.json"));
+    write_weights_asm(&out.join("model.safetensors"));
     println!("cargo:rustc-env=RAGITE_COMPILED_NAME={name}");
     println!("cargo:rustc-env=RAGITE_COMPILED_REVISION={revision}");
     println!("cargo:rustc-env=RAGITE_COMPILED_QUERY_PREFIX={query}");
@@ -105,6 +107,64 @@ fn copy_file(from: &std::path::Path, to: &std::path::Path) {
             to.display()
         );
     });
+}
+
+/// Assembly for one read-only blob. The symbol names match `extern "C"`:
+/// Mach-O adds an underscore, ELF and COFF do not.
+fn write_weights_asm(weights: &std::path::Path) {
+    let out = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let prefix = if target_os == "macos" || target_os == "ios" {
+        "_"
+    } else {
+        ""
+    };
+    let path = asm_path(weights);
+    let body = match target_os.as_str() {
+        "macos" | "ios" => format!(
+            ".section __DATA,__const\n\
+             .p2align 4\n\
+             .globl {prefix}ragite_weights_start\n\
+             {prefix}ragite_weights_start:\n\
+             .incbin \"{path}\"\n\
+             .globl {prefix}ragite_weights_end\n\
+             {prefix}ragite_weights_end:\n"
+        ),
+        "windows" => format!(
+            ".section .rdata,\"dr\"\n\
+             .balign 16\n\
+             .globl {prefix}ragite_weights_start\n\
+             {prefix}ragite_weights_start:\n\
+             .incbin \"{path}\"\n\
+             .globl {prefix}ragite_weights_end\n\
+             {prefix}ragite_weights_end:\n"
+        ),
+        _ => format!(
+            ".pushsection .rodata.ragite_weights,\"a\"\n\
+             .balign 16\n\
+             .globl {prefix}ragite_weights_start\n\
+             {prefix}ragite_weights_start:\n\
+             .incbin \"{path}\"\n\
+             .globl {prefix}ragite_weights_end\n\
+             {prefix}ragite_weights_end:\n\
+             .popsection\n"
+        ),
+    };
+    fs::write(out.join("ragite_weights.s"), body)
+        .unwrap_or_else(|err| panic!("could not write weight assembly: {err}"));
+}
+
+fn asm_path(path: &std::path::Path) -> String {
+    let absolute = path.canonicalize().unwrap_or_else(|err| {
+        panic!("cannot resolve {}: {err}", path.display());
+    });
+    let text = absolute
+        .to_str()
+        .unwrap_or_else(|| panic!("weight path is not utf-8: {}", absolute.display()));
+    if text.contains('"') || text.contains('\n') || text.contains('{') || text.contains('}') {
+        panic!("weight path cannot be embedded in assembly: {text}");
+    }
+    text.replace('\\', "/")
 }
 
 fn rustc_env(key: &str, path: &std::path::Path) {

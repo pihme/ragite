@@ -119,37 +119,27 @@ fn weight_bytes() -> (&'static [u8], &'static [u8], &'static [u8]) {
     )
 }
 
-// The weights (built-in and provider) are linked with the assembler's `.incbin` instead of
-// `include_bytes!`. rustc holds an included file in memory several times over,
-// which gets a 512 MB model (potion-multilingual-128M) OOM-killed on a 16 GB
-// machine; the assembler streams the file into the object instead.
-#[cfg(ragite_provider_model)]
+// The weights are linked with the assembler's `.incbin` instead of `include_bytes!`.
+// rustc holds an included file in memory several times over, which gets a 512 MB
+// model OOM-killed on a 16 GB machine. build.rs writes ELF, Mach-O, or COFF syntax.
+#[cfg(all(
+    any(feature = "builtin-model", ragite_provider_model),
+    not(all(target_os = "windows", target_arch = "x86_64"))
+))]
 std::arch::global_asm!(
-    ".pushsection .rodata.ragite_weights,\"a\"",
-    ".balign 16",
-    ".globl ragite_weights_start",
-    "ragite_weights_start:",
-    concat!(".incbin \"", env!("RAGITE_COMPILED_WEIGHTS"), "\""),
-    ".globl ragite_weights_end",
-    "ragite_weights_end:",
-    ".popsection",
+    include_str!(concat!(env!("OUT_DIR"), "/ragite_weights.s")),
+    options(raw)
 );
 
-// The built-in potion-retrieval-32M weights are 129 MB; same reason as above.
-#[cfg(feature = "builtin-model")]
+// x86_64 Windows parses global_asm as Intel syntax unless asked for AT&T.
+#[cfg(all(
+    any(feature = "builtin-model", ragite_provider_model),
+    target_os = "windows",
+    target_arch = "x86_64"
+))]
 std::arch::global_asm!(
-    ".pushsection .rodata.ragite_weights,\"a\"",
-    ".balign 16",
-    ".globl ragite_weights_start",
-    "ragite_weights_start:",
-    concat!(
-        ".incbin \"",
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../models/potion-retrieval-32M/model.safetensors\""
-    ),
-    ".globl ragite_weights_end",
-    "ragite_weights_end:",
-    ".popsection",
+    include_str!(concat!(env!("OUT_DIR"), "/ragite_weights.s")),
+    options(att_syntax, raw)
 );
 
 #[cfg(any(feature = "builtin-model", ragite_provider_model))]

@@ -26,6 +26,8 @@ The tracker is public. Never paste tokens, keys, credentials or real service res
 make test
 ```
 
+`make test` runs on Linux. CI also builds the default extension on macOS and Windows and runs the parity test (TC-246) there. The macOS job uses Homebrew SQLite, because the system `sqlite3` cannot load an extension.
+
 Python 3, Node.js, and Go must be on `PATH`. The Python test uses the standard-library `sqlite3` module. The Node.js test uses `node:sqlite`. The Go test uses cgo and links the host `libsqlite3` (`libsqlite3.so.0` on Linux). Those tests load the extension built in the tree. They do not use the network and do not install a ragite package.
 
 Test cases are numbered in [TESTSPEC.md](TESTSPEC.md). Cite those numbers from the tests.

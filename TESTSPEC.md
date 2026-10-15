@@ -375,7 +375,7 @@ Unless a case says otherwise:
 
 ## REQ-60
 
-- **TC-179** `a\r\n\r\nb` produces Chunks `a` and `b`. `a\n \nb` and `a\n\tb` produce Chunks `a` and `b`.
+- **TC-179** `a\r\n\r\nb` produces Chunks `a` and `b`. `a\n \nb` and `a\n\t\nb` produce Chunks `a` and `b`. A tab or space is a blank line only when it sits between two line endings.
 - **TC-180** `a\rb\n\nc` produces a Chunk `a\rb`. The stored Document text still contains the `\r`.
 
 ## REQ-61

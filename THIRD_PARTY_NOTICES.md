@@ -2,7 +2,7 @@
 
 ragite itself is dual-licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE). This file lists the third-party software it contains or runs, with the notices their licenses ask for.
 
-Cargo crate licenses are filled from `Cargo.lock` and each crate's own license metadata when those dependencies are added. Nothing below is guessed.
+Cargo crate licenses below are taken from `cargo metadata` for the versions in `Cargo.lock`, or from the crate's LICENSE file when the metadata field is empty. Nothing below is guessed.
 
 ## Compiled in or bundled
 
@@ -260,6 +260,222 @@ The bundled weights are Hugging Face `minishlab/potion-base-8M` at commit `bf8b0
 
 That revision's file list has no LICENSE file. The model card `README.md` front matter says `license: mit`. The citation block in that card says `license = {MIT}`. The Hugging Face model record `cardData.license` is `mit`.
 
+### Cargo crates
+
+These are the crates in `Cargo.lock`. The license column is the `license` field from `cargo metadata` for that version. `model2vec-rs` has no `license` field; its `license_file` is `LICENSE`, and that file is the MIT license with the line `Copyright (c) 2025 The Minish Lab`.
+
+Where a license expression offers a choice, ragite takes MIT or Apache-2.0. Those texts are reproduced under sqlite-vec above. No resolved crate ships a NOTICE file.
+
+| Crate | Version | License |
+| --- | --- | --- |
+| ahash | 0.8.12 | MIT OR Apache-2.0 |
+| aho-corasick | 1.1.5 | Unlicense OR MIT |
+| anyhow | 1.0.104 | MIT OR Apache-2.0 |
+| autocfg | 1.5.1 | Apache-2.0 OR MIT |
+| base64 | 0.13.1 | MIT/Apache-2.0 |
+| bitflags | 2.13.2 | MIT OR Apache-2.0 |
+| block-buffer | 0.10.4 | MIT OR Apache-2.0 |
+| bumpalo | 3.20.3 | MIT OR Apache-2.0 |
+| castaway | 0.2.4 | MIT |
+| cc | 1.8.0 | MIT OR Apache-2.0 |
+| cfg-if | 1.0.5 | MIT OR Apache-2.0 |
+| compact_str | 0.9.1 | MIT |
+| console | 0.15.11 | MIT |
+| cpufeatures | 0.2.17 | MIT OR Apache-2.0 |
+| crossbeam-deque | 0.8.8 | MIT OR Apache-2.0 |
+| crossbeam-epoch | 0.9.21 | MIT OR Apache-2.0 |
+| crossbeam-utils | 0.8.23 | MIT OR Apache-2.0 |
+| crunchy | 0.2.4 | MIT |
+| crypto-common | 0.1.7 | MIT OR Apache-2.0 |
+| darling | 0.20.11 | MIT |
+| darling_core | 0.20.11 | MIT |
+| darling_macro | 0.20.11 | MIT |
+| dary_heap | 0.3.9 | MIT OR Apache-2.0 |
+| derive_builder | 0.20.2 | MIT OR Apache-2.0 |
+| derive_builder_core | 0.20.2 | MIT OR Apache-2.0 |
+| derive_builder_macro | 0.20.2 | MIT OR Apache-2.0 |
+| digest | 0.10.7 | MIT OR Apache-2.0 |
+| either | 1.19.0 | MIT OR Apache-2.0 |
+| encode_unicode | 1.0.0 | Apache-2.0 OR MIT |
+| esaxx-rs | 0.1.10 | Apache-2.0 |
+| find-msvc-tools | 0.1.14 | MIT OR Apache-2.0 |
+| fnv | 1.0.7 | Apache-2.0 / MIT |
+| futures-core | 0.3.34 | MIT OR Apache-2.0 |
+| futures-task | 0.3.34 | MIT OR Apache-2.0 |
+| futures-util | 0.3.34 | MIT OR Apache-2.0 |
+| generic-array | 0.14.7 | MIT |
+| getrandom | 0.3.4 | MIT OR Apache-2.0 |
+| half | 2.7.1 | MIT OR Apache-2.0 |
+| ident_case | 1.0.1 | MIT/Apache-2.0 |
+| indicatif | 0.17.11 | MIT |
+| itertools | 0.14.0 | MIT OR Apache-2.0 |
+| itoa | 1.0.18 | MIT OR Apache-2.0 |
+| js-sys | 0.3.106 | MIT OR Apache-2.0 |
+| libc | 0.2.190 | MIT OR Apache-2.0 |
+| libsqlite3-sys | 0.38.2 | MIT |
+| log | 0.4.34 | MIT OR Apache-2.0 |
+| macro_rules_attribute | 0.2.3 | Apache-2.0 OR MIT OR Zlib |
+| macro_rules_attribute-proc_macro | 0.2.3 | Apache-2.0 OR MIT OR Zlib |
+| matrixmultiply | 0.3.11 | MIT/Apache-2.0 |
+| memchr | 2.8.3 | Unlicense OR MIT |
+| minimal-lexical | 0.2.1 | MIT/Apache-2.0 |
+| model2vec-rs | 0.3.0 | MIT (LICENSE file; metadata license field is empty) |
+| monostate | 0.1.18 | MIT OR Apache-2.0 |
+| monostate-impl | 0.1.18 | MIT OR Apache-2.0 |
+| ndarray | 0.15.6 | MIT OR Apache-2.0 |
+| nom | 7.1.3 | MIT |
+| num-complex | 0.4.6 | MIT OR Apache-2.0 |
+| num-integer | 0.1.47 | MIT OR Apache-2.0 |
+| num-traits | 0.2.19 | MIT OR Apache-2.0 |
+| number_prefix | 0.4.0 | MIT |
+| once_cell | 1.21.4 | MIT OR Apache-2.0 |
+| onig | 6.5.3 | MIT |
+| onig_sys | 69.9.3 | MIT |
+| paste | 1.0.15 | MIT OR Apache-2.0 |
+| pastey | 0.2.3 | MIT OR Apache-2.0 |
+| pin-project-lite | 0.2.17 | Apache-2.0 OR MIT |
+| pkg-config | 0.3.34 | MIT OR Apache-2.0 |
+| portable-atomic | 1.15.0 | Apache-2.0 OR MIT |
+| ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 |
+| prettyplease | 0.2.37 | MIT OR Apache-2.0 |
+| proc-macro2 | 1.0.107 | MIT OR Apache-2.0 |
+| quote | 1.0.47 | MIT OR Apache-2.0 |
+| r-efi | 5.3.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later |
+| rand | 0.9.5 | MIT OR Apache-2.0 |
+| rand_chacha | 0.9.0 | MIT OR Apache-2.0 |
+| rand_core | 0.9.5 | MIT OR Apache-2.0 |
+| rawpointer | 0.2.1 | MIT/Apache-2.0 |
+| rayon | 1.12.0 | MIT OR Apache-2.0 |
+| rayon-cond | 0.4.0 | Apache-2.0/MIT |
+| rayon-core | 1.13.0 | MIT OR Apache-2.0 |
+| regex | 1.13.1 | MIT OR Apache-2.0 |
+| regex-automata | 0.4.18 | MIT OR Apache-2.0 |
+| regex-syntax | 0.8.11 | MIT OR Apache-2.0 |
+| rustversion | 1.0.23 | MIT OR Apache-2.0 |
+| ryu | 1.0.23 | Apache-2.0 OR BSL-1.0 |
+| safetensors | 0.5.3 | Apache-2.0 |
+| serde | 1.0.229 | MIT OR Apache-2.0 |
+| serde_core | 1.0.229 | MIT OR Apache-2.0 |
+| serde_derive | 1.0.229 | MIT OR Apache-2.0 |
+| serde_json | 1.0.154 | MIT OR Apache-2.0 |
+| sha2 | 0.10.9 | MIT OR Apache-2.0 |
+| shlex | 2.0.1 | MIT OR Apache-2.0 |
+| slab | 0.4.12 | MIT |
+| smallvec | 1.16.3 | MIT OR Apache-2.0 |
+| spm_precompiled | 0.1.4 | Apache-2.0 |
+| static_assertions | 1.1.0 | MIT OR Apache-2.0 |
+| strsim | 0.11.1 | MIT |
+| syn | 2.0.119 | MIT OR Apache-2.0 |
+| syn | 3.0.9 | MIT OR Apache-2.0 |
+| thiserror | 2.0.21 | MIT OR Apache-2.0 |
+| thiserror-impl | 2.0.21 | MIT OR Apache-2.0 |
+| tokenizers | 0.21.4 | Apache-2.0 |
+| typenum | 1.20.1 | MIT OR Apache-2.0 |
+| unicode-ident | 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 |
+| unicode-normalization-alignments | 0.1.12 | MIT/Apache-2.0 |
+| unicode-segmentation | 1.13.3 | MIT OR Apache-2.0 |
+| unicode-width | 0.2.2 | MIT OR Apache-2.0 |
+| unicode_categories | 0.1.1 | MIT OR Apache-2.0 |
+| vcpkg | 0.2.15 | MIT/Apache-2.0 |
+| version_check | 0.9.5 | MIT/Apache-2.0 |
+| wasip2 | 1.0.4+wasi-0.2.12 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
+| wasm-bindgen | 0.2.129 | MIT OR Apache-2.0 |
+| wasm-bindgen-macro | 0.2.129 | MIT OR Apache-2.0 |
+| wasm-bindgen-macro-support | 0.2.129 | MIT OR Apache-2.0 |
+| wasm-bindgen-shared | 0.2.129 | MIT OR Apache-2.0 |
+| web-time | 1.1.0 | MIT OR Apache-2.0 |
+| windows-sys | 0.59.0 | MIT OR Apache-2.0 |
+| windows-targets | 0.52.6 | MIT OR Apache-2.0 |
+| windows_aarch64_gnullvm | 0.52.6 | MIT OR Apache-2.0 |
+| windows_aarch64_msvc | 0.52.6 | MIT OR Apache-2.0 |
+| windows_i686_gnu | 0.52.6 | MIT OR Apache-2.0 |
+| windows_i686_gnullvm | 0.52.6 | MIT OR Apache-2.0 |
+| windows_i686_msvc | 0.52.6 | MIT OR Apache-2.0 |
+| windows_x86_64_gnu | 0.52.6 | MIT OR Apache-2.0 |
+| windows_x86_64_gnullvm | 0.52.6 | MIT OR Apache-2.0 |
+| windows_x86_64_msvc | 0.52.6 | MIT OR Apache-2.0 |
+| wit-bindgen | 0.57.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
+| zerocopy | 0.8.63 | BSD-2-Clause OR Apache-2.0 OR MIT |
+| zerocopy-derive | 0.8.63 | BSD-2-Clause OR Apache-2.0 OR MIT |
+| zmij | 1.0.23 | MIT |
+
+`libsqlite3-sys` 0.38.2 is MIT. Its LICENSE file begins `Copyright (c) 2014 The rusqlite developers`. The extension enables the `loadable_extension` feature, so this crate supplies bindings and does not link a copy of SQLite.
+
+`onig` 6.5.3 and `onig_sys` 69.9.3 are MIT. The `onig_sys` LICENSE.md copyright line is `Copyright (c) 2015 Will Speak <will@willspeak.me>, Ivan Ivashchenko <defuz@me.com>, and contributors.` `onig_sys` also compiles Oniguruma 6.9.10 from the crate directory `oniguruma/`. That code is not MIT. Its `COPYING` file says:
+
+```
+Oniguruma LICENSE
+-----------------
+
+Copyright (c) 2002-2021  K.Kosako  <kkosako0@gmail.com>
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
+```
+
+`unicode-ident` 1.0.27 is `(MIT OR Apache-2.0) AND Unicode-3.0`. The Unicode-3.0 notice in its `LICENSE-UNICODE` file is:
+
+```
+UNICODE LICENSE V3
+
+COPYRIGHT AND PERMISSION NOTICE
+
+Copyright © 1991-2023 Unicode, Inc.
+
+NOTICE TO USER: Carefully read the following legal agreement. BY
+DOWNLOADING, INSTALLING, COPYING OR OTHERWISE USING DATA FILES, AND/OR
+SOFTWARE, YOU UNEQUIVOCALLY ACCEPT, AND AGREE TO BE BOUND BY, ALL OF THE
+TERMS AND CONDITIONS OF THIS AGREEMENT. IF YOU DO NOT AGREE, DO NOT
+DOWNLOAD, INSTALL, COPY, DISTRIBUTE OR USE THE DATA FILES OR SOFTWARE.
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of data files and any associated documentation (the "Data Files") or
+software and any associated documentation (the "Software") to deal in the
+Data Files or Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, and/or sell
+copies of the Data Files or Software, and to permit persons to whom the
+Data Files or Software are furnished to do so, provided that either (a)
+this copyright and permission notice appear with all copies of the Data
+Files or Software, or (b) this copyright and permission notice appear in
+associated Documentation.
+
+THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF
+THIRD PARTY RIGHTS.
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS NOTICE
+BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL DAMAGES,
+OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THE DATA
+FILES OR SOFTWARE.
+
+Except as contained in this notice, the name of a copyright holder shall
+not be used in advertising or otherwise to promote the sale, use or other
+dealings in these Data Files or Software without prior written
+authorization of the copyright holder.
+```
+
 ## External programs (run, not included)
 
-Tests load the extension into the SQLite that the `rusqlite` `bundled` feature compiles. That library is not copied into the ragite extension.
+`make test` runs the `sqlite3` command-line program and loads the ragite extension into it. That program is not part of ragite. The extension does not link a copy of SQLite.

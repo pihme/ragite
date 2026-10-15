@@ -1,0 +1,997 @@
+//! Virtual tables `ragite` (documents) and the read-only companion `<name>_chunks`.
+
+use std::collections::HashSet;
+use std::ffi::{CStr, c_char, c_int, c_void};
+use std::mem;
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::{LazyLock, Mutex, OnceLock};
+
+use libsqlite3_sys::{
+    sqlite3, sqlite3_declare_vtab, sqlite3_free, sqlite3_module, sqlite3_value,
+    sqlite3_value_bytes, sqlite3_value_int64, sqlite3_value_text, sqlite3_value_type,
+    sqlite3_vtab, sqlite3_vtab_cursor, SQLITE_ERROR, SQLITE_FLOAT, SQLITE_INTEGER, SQLITE_NULL,
+    SQLITE_OK, SQLITE_TEXT, SQLITE_TRANSIENT,
+};
+use ragite_core::{
+    BuiltinModel, Chunk, Role, TECHNICAL_ID, builtin_model, chunk_plain, heading_path_json,
+    sha256_hex,
+};
+
+use crate::sql::{self, Stmt};
+
+const DOC_SCHEMA: &str =
+    "CREATE TABLE x(doc_id INTEGER, text TEXT, source TEXT, format TEXT, hash TEXT, score REAL)";
+const CHUNK_SCHEMA: &str = "CREATE TABLE x(chunk TEXT, doc_id INTEGER, source TEXT, start INTEGER, end INTEGER, heading_path TEXT, meta_json TEXT, score REAL)";
+
+const COL_DOC_ID: c_int = 0;
+const COL_TEXT: c_int = 1;
+const COL_SOURCE: c_int = 2;
+const COL_FORMAT: c_int = 3;
+const COL_HASH: c_int = 4;
+const COL_SCORE: c_int = 5;
+
+const COL_CHUNK: c_int = 0;
+const COL_C_DOC: c_int = 1;
+const COL_C_SOURCE: c_int = 2;
+const COL_START: c_int = 3;
+const COL_END: c_int = 4;
+const COL_PATH: c_int = 5;
+const COL_META: c_int = 6;
+const COL_C_SCORE: c_int = 7;
+
+static ALLOW_DROP: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+pub fn module() -> &'static sqlite3_module {
+    static MODULE: OnceLock<sqlite3_module> = OnceLock::new();
+    MODULE.get_or_init(|| {
+        let mut module: sqlite3_module = unsafe { mem::zeroed() };
+        module.iVersion = 2;
+        module.xCreate = Some(vtab_create);
+        module.xConnect = Some(vtab_connect);
+        module.xBestIndex = Some(vtab_best_index);
+        module.xDisconnect = Some(vtab_disconnect);
+        module.xDestroy = Some(vtab_destroy);
+        module.xOpen = Some(vtab_open);
+        module.xClose = Some(vtab_close);
+        module.xFilter = Some(vtab_filter);
+        module.xNext = Some(vtab_next);
+        module.xEof = Some(vtab_eof);
+        module.xColumn = Some(vtab_column);
+        module.xRowid = Some(vtab_rowid);
+        module.xUpdate = Some(vtab_update);
+        module
+    })
+}
+
+#[repr(C)]
+struct Vtab {
+    base: sqlite3_vtab,
+    db: *mut sqlite3,
+    schema: String,
+    doc_name: String,
+    chunks: bool,
+    model_ok: bool,
+}
+
+#[repr(C)]
+struct Cursor {
+    base: sqlite3_vtab_cursor,
+    rows: Vec<Row>,
+    index: usize,
+}
+
+enum Row {
+    Doc {
+        doc_id: i64,
+        text: String,
+        source: String,
+        format: String,
+        hash: String,
+    },
+    Chunk {
+        chunk_id: i64,
+        doc_id: i64,
+        source: String,
+        start: i64,
+        end: i64,
+        heading_path: String,
+        text: String,
+        meta_json: Option<String>,
+    },
+}
+
+fn drop_key(schema: &str, name: &str) -> String {
+    format!("{schema}.{name}")
+}
+
+fn guard(default: c_int, f: impl FnOnce() -> c_int + std::panic::UnwindSafe) -> c_int {
+    match catch_unwind(f) {
+        Ok(rc) => rc,
+        Err(_) => default,
+    }
+}
+
+unsafe extern "C" fn vtab_create(
+    db: *mut sqlite3,
+    _aux: *mut c_void,
+    argc: c_int,
+    argv: *const *const c_char,
+    pp_vtab: *mut *mut sqlite3_vtab,
+    pz_err: *mut *mut c_char,
+) -> c_int {
+    guard(SQLITE_ERROR, AssertUnwindSafe(|| unsafe {
+        match create(db, argc, argv, pp_vtab) {
+            Ok(()) => SQLITE_OK,
+            Err(msg) => {
+                if !pz_err.is_null() {
+                    *pz_err = sql::alloc_text(&msg);
+                }
+                SQLITE_ERROR
+            }
+        }
+    }))
+}
+
+unsafe extern "C" fn vtab_connect(
+    db: *mut sqlite3,
+    _aux: *mut c_void,
+    argc: c_int,
+    argv: *const *const c_char,
+    pp_vtab: *mut *mut sqlite3_vtab,
+    pz_err: *mut *mut c_char,
+) -> c_int {
+    guard(SQLITE_ERROR, AssertUnwindSafe(|| unsafe {
+        match connect(db, argc, argv, pp_vtab, false) {
+            Ok(()) => SQLITE_OK,
+            Err(msg) => {
+                if !pz_err.is_null() {
+                    *pz_err = sql::alloc_text(&msg);
+                }
+                SQLITE_ERROR
+            }
+        }
+    }))
+}
+
+unsafe fn create(
+    db: *mut sqlite3,
+    argc: c_int,
+    argv: *const *const c_char,
+    pp_vtab: *mut *mut sqlite3_vtab,
+) -> Result<(), String> {
+    let args = read_args(argc, argv)?;
+    if args.chunks {
+        return unsafe { connect(db, argc, argv, pp_vtab, false) };
+    }
+    if let Err(err) = builtin_model() {
+        return Err(err);
+    }
+    let model_id = resolve_model(&args.model)?;
+    for name in shadow_names(&args.table) {
+        if sql::exists(db, &args.schema, &name)? {
+            return Err(format!("name already exists: {name}"));
+        }
+    }
+    if let Err(err) = create_shadows(db, &args.schema, &args.table, &model_id) {
+        let _ = destroy_shadows(db, &args.schema, &args.table);
+        return Err(err);
+    }
+    if let Err(err) = unsafe { connect(db, argc, argv, pp_vtab, true) } {
+        let _ = destroy_shadows(db, &args.schema, &args.table);
+        return Err(err);
+    }
+    Ok(())
+}
+
+fn shadow_names(table: &str) -> [String; 6] {
+    [
+        format!("{table}_chunks"),
+        format!("{table}_documents"),
+        format!("{table}_chunk_rows"),
+        format!("{table}_vec"),
+        format!("{table}_fts"),
+        format!("{table}_model"),
+    ]
+}
+
+fn create_shadows(
+    db: *mut sqlite3,
+    schema: &str,
+    table: &str,
+    model_id: &str,
+) -> Result<(), String> {
+    let model = builtin_model()?;
+    let documents = sql::qualified(schema, &format!("{table}_documents"));
+    let chunks = sql::qualified(schema, &format!("{table}_chunk_rows"));
+    let model_table = sql::qualified(schema, &format!("{table}_model"));
+    let vec = sql::qualified(schema, &format!("{table}_vec"));
+    let fts = sql::qualified(schema, &format!("{table}_fts"));
+    let companion = sql::qualified(schema, &format!("{table}_chunks"));
+    sql::exec(
+        db,
+        &format!(
+            "CREATE TABLE {documents} (
+                doc_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source TEXT NOT NULL,
+                text TEXT NOT NULL,
+                format TEXT NOT NULL,
+                hash TEXT NOT NULL
+            )"
+        ),
+    )?;
+    sql::exec(
+        db,
+        &format!(
+            "CREATE TABLE {chunks} (
+                chunk_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doc_id INTEGER NOT NULL,
+                start INTEGER NOT NULL,
+                end INTEGER NOT NULL,
+                heading_path TEXT NOT NULL,
+                text TEXT NOT NULL,
+                meta_json TEXT
+            )"
+        ),
+    )?;
+    sql::exec(
+        db,
+        &format!("CREATE TABLE {model_table} (technical_id TEXT NOT NULL)"),
+    )?;
+    let insert = Stmt::prepare(db, &format!("INSERT INTO {model_table} (technical_id) VALUES (?1)"))?;
+    insert.bind_text(1, model_id)?;
+    insert.step()?;
+    sql::exec(
+        db,
+        &format!(
+            "CREATE VIRTUAL TABLE {vec} USING vec0(embedding float[{}] distance_metric=cosine)",
+            model.dimension()
+        ),
+    )?;
+    sql::exec(
+        db,
+        &format!(
+            "CREATE VIRTUAL TABLE {fts} USING fts5(text, tokenize = 'unicode61', content='', contentless_delete=1)"
+        ),
+    )?;
+    let parent = args_parent_literal(table);
+    sql::exec(
+        db,
+        &format!("CREATE VIRTUAL TABLE {companion} USING ragite(companion=1, parent={parent})"),
+    )?;
+    Ok(())
+}
+
+fn args_parent_literal(table: &str) -> String {
+    format!("'{}'", table.replace('\'', "''"))
+}
+
+fn destroy_shadows(db: *mut sqlite3, schema: &str, table: &str) -> Result<(), String> {
+    let companion = format!("{table}_chunks");
+    let key = drop_key(schema, &companion);
+    ALLOW_DROP.lock().expect("drop set").insert(key.clone());
+    let drop_companion = sql::exec(db, &format!("DROP TABLE IF EXISTS {}", sql::qualified(schema, &companion)));
+    ALLOW_DROP.lock().expect("drop set").remove(&key);
+    drop_companion?;
+    for suffix in ["_vec", "_fts", "_chunk_rows", "_documents", "_model"] {
+        sql::exec(
+            db,
+            &format!(
+                "DROP TABLE IF EXISTS {}",
+                sql::qualified(schema, &format!("{table}{suffix}"))
+            ),
+        )?;
+    }
+    Ok(())
+}
+
+unsafe fn connect(
+    db: *mut sqlite3,
+    argc: c_int,
+    argv: *const *const c_char,
+    pp_vtab: *mut *mut sqlite3_vtab,
+    just_created: bool,
+) -> Result<(), String> {
+    let args = read_args(argc, argv)?;
+    let model_ok = if args.chunks {
+        read_model_ok(db, &args.schema, &args.table).unwrap_or(false)
+    } else if just_created {
+        true
+    } else {
+        read_model_ok(db, &args.schema, &args.table)?
+    };
+    let schema_sql = if args.chunks { CHUNK_SCHEMA } else { DOC_SCHEMA };
+    let c_schema = std::ffi::CString::new(schema_sql).unwrap();
+    let rc = unsafe { sqlite3_declare_vtab(db, c_schema.as_ptr()) };
+    if rc != SQLITE_OK {
+        return Err(sql::errmsg(db));
+    }
+    let vtab = Box::new(Vtab {
+        base: unsafe { mem::zeroed() },
+        db,
+        schema: args.schema,
+        doc_name: args.table,
+        chunks: args.chunks,
+        model_ok,
+    });
+    unsafe {
+        *pp_vtab = Box::into_raw(vtab).cast();
+    }
+    Ok(())
+}
+
+fn read_model_ok(db: *mut sqlite3, schema: &str, table: &str) -> Result<bool, String> {
+    let sql = format!(
+        "SELECT technical_id FROM {}",
+        sql::qualified(schema, &format!("{table}_model"))
+    );
+    let stmt = Stmt::prepare(db, &sql)?;
+    if !stmt.step()? {
+        return Err(format!("stored model is missing: {table}"));
+    }
+    let stored = stmt.column_text(0).unwrap_or_default();
+    Ok(stored == TECHNICAL_ID && builtin_model().is_ok())
+}
+
+struct Args {
+    schema: String,
+    table: String,
+    chunks: bool,
+    model: Option<String>,
+}
+
+fn read_args(argc: c_int, argv: *const *const c_char) -> Result<Args, String> {
+    if argc < 3 {
+        return Err("create is missing a table name".to_string());
+    }
+    let mut raw = Vec::new();
+    for i in 0..argc {
+        raw.push(unsafe { cstr_at(argv, i) });
+    }
+    let schema = raw[1].clone();
+    let mut table = raw[2].clone();
+    let mut chunks = false;
+    let mut model = None;
+    for arg in raw.iter().skip(3) {
+        let Some((key, value)) = split_arg(arg) else {
+            return Err(format!("argument is not accepted: {arg}"));
+        };
+        match key {
+            "companion" => {
+                if value != "1" {
+                    return Err(format!("argument is not accepted: {arg}"));
+                }
+                chunks = true;
+            }
+            "parent" => {
+                if value.is_empty() {
+                    return Err("parent table is empty".to_string());
+                }
+                table = value;
+            }
+            "model" => model = Some(value),
+            other => return Err(format!("argument is not accepted: {other}")),
+        }
+    }
+    if schema.is_empty() || table.is_empty() {
+        return Err("table name is empty".to_string());
+    }
+    Ok(Args {
+        schema,
+        table,
+        chunks,
+        model,
+    })
+}
+
+fn resolve_model(model: &Option<String>) -> Result<String, String> {
+    let Some(value) = model else {
+        return Ok(TECHNICAL_ID.to_string());
+    };
+    if value.is_empty() {
+        return Err("model is empty".to_string());
+    }
+    if value == "default" {
+        return Err("model is not accepted: default".to_string());
+    }
+    if value.contains("://") || value.contains('/') || value.contains('\\') {
+        return Err(format!("model is not accepted: {value}"));
+    }
+    if value != TECHNICAL_ID {
+        return Err(format!("model cannot be loaded: {value}"));
+    }
+    builtin_model()?;
+    Ok(value.clone())
+}
+
+fn split_arg(arg: &str) -> Option<(&str, String)> {
+    let (key, value) = arg.split_once('=')?;
+    let value = value.trim();
+    let value = if value.len() >= 2 {
+        let bytes = value.as_bytes();
+        let quote = bytes[0];
+        if (quote == b'\'' || quote == b'"') && bytes[bytes.len() - 1] == quote {
+            let inner = &value[1..value.len() - 1];
+            if quote == b'\'' {
+                inner.replace("''", "'")
+            } else {
+                inner.replace("\"\"", "\"")
+            }
+        } else {
+            value.to_string()
+        }
+    } else {
+        value.to_string()
+    };
+    Some((key.trim(), value))
+}
+
+unsafe fn cstr_at(argv: *const *const c_char, index: c_int) -> String {
+    let ptr = unsafe { *argv.offset(index as isize) };
+    if ptr.is_null() {
+        return String::new();
+    }
+    unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() }
+}
+
+unsafe extern "C" fn vtab_best_index(
+    _vtab: *mut sqlite3_vtab,
+    info: *mut libsqlite3_sys::sqlite3_index_info,
+) -> c_int {
+    if !info.is_null() {
+        unsafe {
+            (*info).estimatedCost = 1_000_000.0;
+        }
+    }
+    SQLITE_OK
+}
+
+unsafe extern "C" fn vtab_disconnect(vtab: *mut sqlite3_vtab) -> c_int {
+    if !vtab.is_null() {
+        unsafe {
+            drop(Box::from_raw(vtab.cast::<Vtab>()));
+        }
+    }
+    SQLITE_OK
+}
+
+unsafe extern "C" fn vtab_destroy(vtab: *mut sqlite3_vtab) -> c_int {
+    guard(SQLITE_ERROR, AssertUnwindSafe(|| unsafe { destroy(vtab) }))
+}
+
+unsafe fn destroy(vtab: *mut sqlite3_vtab) -> c_int {
+    let table = unsafe { &*vtab.cast::<Vtab>() };
+    if table.chunks {
+        let key = drop_key(&table.schema, &format!("{}_chunks", table.doc_name));
+        let allowed = ALLOW_DROP.lock().expect("drop set").remove(&key);
+        if !allowed {
+            // DROP reports SQLite's generic error. xDestroy's zErrMsg is not copied.
+            set_vtab_error(
+                vtab,
+                &format!("cannot drop companion table: {}_chunks", table.doc_name),
+            );
+            return SQLITE_ERROR;
+        }
+        unsafe {
+            drop(Box::from_raw(vtab.cast::<Vtab>()));
+        }
+        return SQLITE_OK;
+    }
+    let schema = table.schema.clone();
+    let name = table.doc_name.clone();
+    let db = table.db;
+    if let Err(err) = destroy_shadows(db, &schema, &name) {
+        set_vtab_error(vtab, &format!("drop failed: {err}"));
+        return SQLITE_ERROR;
+    }
+    unsafe {
+        drop(Box::from_raw(vtab.cast::<Vtab>()));
+    }
+    SQLITE_OK
+}
+
+fn set_vtab_error(vtab: *mut sqlite3_vtab, msg: &str) {
+    unsafe {
+        if !(*vtab).zErrMsg.is_null() {
+            sqlite3_free((*vtab).zErrMsg.cast());
+        }
+        (*vtab).zErrMsg = sql::alloc_text(msg);
+    }
+}
+
+unsafe extern "C" fn vtab_open(
+    vtab: *mut sqlite3_vtab,
+    pp_cursor: *mut *mut sqlite3_vtab_cursor,
+) -> c_int {
+    let cursor = Box::new(Cursor {
+        base: unsafe { mem::zeroed() },
+        rows: Vec::new(),
+        index: 0,
+    });
+    unsafe {
+        let raw = Box::into_raw(cursor);
+        (*raw).base.pVtab = vtab;
+        *pp_cursor = raw.cast();
+    }
+    SQLITE_OK
+}
+
+unsafe extern "C" fn vtab_close(cursor: *mut sqlite3_vtab_cursor) -> c_int {
+    if !cursor.is_null() {
+        unsafe {
+            drop(Box::from_raw(cursor.cast::<Cursor>()));
+        }
+    }
+    SQLITE_OK
+}
+
+unsafe extern "C" fn vtab_filter(
+    cursor: *mut sqlite3_vtab_cursor,
+    _idx_num: c_int,
+    _idx_str: *const c_char,
+    _argc: c_int,
+    _argv: *mut *mut sqlite3_value,
+) -> c_int {
+    guard(SQLITE_ERROR, AssertUnwindSafe(|| unsafe { filter(cursor) }))
+}
+
+unsafe fn filter(cursor: *mut sqlite3_vtab_cursor) -> c_int {
+    let cursor = unsafe { &mut *cursor.cast::<Cursor>() };
+    let vtab = unsafe { &*cursor.base.pVtab.cast::<Vtab>() };
+    match load_rows(vtab) {
+        Ok(rows) => {
+            cursor.rows = rows;
+            cursor.index = 0;
+            SQLITE_OK
+        }
+        Err(err) => {
+            set_vtab_error(cursor.base.pVtab, &err);
+            SQLITE_ERROR
+        }
+    }
+}
+
+fn load_rows(vtab: &Vtab) -> Result<Vec<Row>, String> {
+    if vtab.chunks {
+        let sql = format!(
+            "SELECT c.chunk_id, c.doc_id, d.source, c.start, c.end, c.heading_path, c.text, c.meta_json
+             FROM {chunks} c
+             JOIN {docs} d ON d.doc_id = c.doc_id
+             ORDER BY c.doc_id, c.chunk_id",
+            chunks = sql::qualified(&vtab.schema, &format!("{}_chunk_rows", vtab.doc_name)),
+            docs = sql::qualified(&vtab.schema, &format!("{}_documents", vtab.doc_name)),
+        );
+        let stmt = Stmt::prepare(vtab.db, &sql)?;
+        let mut rows = Vec::new();
+        while stmt.step()? {
+            rows.push(Row::Chunk {
+                chunk_id: stmt.column_i64(0),
+                doc_id: stmt.column_i64(1),
+                source: stmt.column_text(2).unwrap_or_default(),
+                start: stmt.column_i64(3),
+                end: stmt.column_i64(4),
+                heading_path: stmt.column_text(5).unwrap_or_else(|| "[]".to_string()),
+                text: stmt.column_text(6).unwrap_or_default(),
+                meta_json: stmt.column_text(7),
+            });
+        }
+        Ok(rows)
+    } else {
+        let sql = format!(
+            "SELECT doc_id, text, source, format, hash FROM {} ORDER BY doc_id",
+            sql::qualified(&vtab.schema, &format!("{}_documents", vtab.doc_name))
+        );
+        let stmt = Stmt::prepare(vtab.db, &sql)?;
+        let mut rows = Vec::new();
+        while stmt.step()? {
+            rows.push(Row::Doc {
+                doc_id: stmt.column_i64(0),
+                text: stmt.column_text(1).unwrap_or_default(),
+                source: stmt.column_text(2).unwrap_or_default(),
+                format: stmt.column_text(3).unwrap_or_default(),
+                hash: stmt.column_text(4).unwrap_or_default(),
+            });
+        }
+        Ok(rows)
+    }
+}
+
+unsafe extern "C" fn vtab_next(cursor: *mut sqlite3_vtab_cursor) -> c_int {
+    let cursor = unsafe { &mut *cursor.cast::<Cursor>() };
+    cursor.index += 1;
+    SQLITE_OK
+}
+
+unsafe extern "C" fn vtab_eof(cursor: *mut sqlite3_vtab_cursor) -> c_int {
+    let cursor = unsafe { &*cursor.cast::<Cursor>() };
+    i32::from(cursor.index >= cursor.rows.len())
+}
+
+unsafe extern "C" fn vtab_column(
+    cursor: *mut sqlite3_vtab_cursor,
+    ctx: *mut libsqlite3_sys::sqlite3_context,
+    col: c_int,
+) -> c_int {
+    let cursor = unsafe { &*cursor.cast::<Cursor>() };
+    let Some(row) = cursor.rows.get(cursor.index) else {
+        return SQLITE_ERROR;
+    };
+    match row {
+        Row::Doc {
+            doc_id,
+            text,
+            source,
+            format,
+            hash,
+        } => match col {
+            COL_DOC_ID => result_i64(ctx, *doc_id),
+            COL_TEXT => result_text(ctx, text),
+            COL_SOURCE => result_text(ctx, source),
+            COL_FORMAT => result_text(ctx, format),
+            COL_HASH => result_text(ctx, hash),
+            COL_SCORE => result_null(ctx),
+            _ => SQLITE_ERROR,
+        },
+        Row::Chunk {
+            doc_id,
+            source,
+            start,
+            end,
+            heading_path,
+            text,
+            meta_json,
+            ..
+        } => match col {
+            COL_CHUNK => result_text(ctx, text),
+            COL_C_DOC => result_i64(ctx, *doc_id),
+            COL_C_SOURCE => result_text(ctx, source),
+            COL_START => result_i64(ctx, *start),
+            COL_END => result_i64(ctx, *end),
+            COL_PATH => result_text(ctx, heading_path),
+            COL_META => {
+                if let Some(meta) = meta_json {
+                    result_text(ctx, meta)
+                } else {
+                    result_null(ctx)
+                }
+            }
+            COL_C_SCORE => result_null(ctx),
+            _ => SQLITE_ERROR,
+        },
+    }
+}
+
+unsafe extern "C" fn vtab_rowid(cursor: *mut sqlite3_vtab_cursor, p_rowid: *mut i64) -> c_int {
+    let cursor = unsafe { &*cursor.cast::<Cursor>() };
+    let Some(row) = cursor.rows.get(cursor.index) else {
+        return SQLITE_ERROR;
+    };
+    unsafe {
+        *p_rowid = match row {
+            Row::Doc { doc_id, .. } => *doc_id,
+            Row::Chunk { chunk_id, .. } => *chunk_id,
+        };
+    }
+    SQLITE_OK
+}
+
+fn result_null(ctx: *mut libsqlite3_sys::sqlite3_context) -> c_int {
+    unsafe { libsqlite3_sys::sqlite3_result_null(ctx) };
+    SQLITE_OK
+}
+
+fn result_i64(ctx: *mut libsqlite3_sys::sqlite3_context, value: i64) -> c_int {
+    unsafe { libsqlite3_sys::sqlite3_result_int64(ctx, value) };
+    SQLITE_OK
+}
+
+fn result_text(ctx: *mut libsqlite3_sys::sqlite3_context, value: &str) -> c_int {
+    unsafe {
+        libsqlite3_sys::sqlite3_result_text(
+            ctx,
+            value.as_ptr().cast(),
+            value.len() as c_int,
+            SQLITE_TRANSIENT(),
+        );
+    }
+    SQLITE_OK
+}
+
+unsafe extern "C" fn vtab_update(
+    vtab: *mut sqlite3_vtab,
+    argc: c_int,
+    argv: *mut *mut sqlite3_value,
+    p_rowid: *mut i64,
+) -> c_int {
+    guard(SQLITE_ERROR, AssertUnwindSafe(|| unsafe {
+        match update(vtab, argc, argv, p_rowid) {
+            Ok(()) => SQLITE_OK,
+            Err(err) => {
+                set_vtab_error(vtab, &err);
+                SQLITE_ERROR
+            }
+        }
+    }))
+}
+
+unsafe fn update(
+    vtab: *mut sqlite3_vtab,
+    argc: c_int,
+    argv: *mut *mut sqlite3_value,
+    p_rowid: *mut i64,
+) -> Result<(), String> {
+    let table = unsafe { &*vtab.cast::<Vtab>() };
+    if table.chunks {
+        return Err(format!(
+            "cannot write companion table: {}_chunks",
+            table.doc_name
+        ));
+    }
+    if argc == 1 {
+        let rowid = value_i64(unsafe { *argv }).ok_or_else(|| "delete is missing a rowid".to_string())?;
+        delete_document(table, rowid)?;
+        return Ok(());
+    }
+    if argc != 8 {
+        return Err("write has the wrong number of columns".to_string());
+    }
+    let old_rowid = value_i64(unsafe { *argv });
+    let new_rowid = value_i64(unsafe { *argv.add(1) });
+    let doc_id_col = value_i64(unsafe { *argv.add(2) });
+    let text = value_text(unsafe { *argv.add(3) });
+    let source = value_text(unsafe { *argv.add(4) });
+    let format = value_text(unsafe { *argv.add(5) });
+    let hash = value_text(unsafe { *argv.add(6) });
+    let score_set = !value_is_null(unsafe { *argv.add(7) });
+    if score_set {
+        return Err("score cannot be written".to_string());
+    }
+    if old_rowid.is_none() {
+        if new_rowid.is_some() || doc_id_col.is_some() {
+            return Err("doc_id is assigned by ragite".to_string());
+        }
+        let text = require_text(text)?;
+        let source = source.unwrap_or_default();
+        let format = canonical_format(format.as_deref())?;
+        let hash = hash.unwrap_or_else(|| sha256_hex(&text));
+        require_model(table)?;
+        let doc_id = insert_document(table, &text, &source, &format, &hash)?;
+        if !p_rowid.is_null() {
+            unsafe { *p_rowid = doc_id };
+        }
+        return Ok(());
+    }
+    let old_rowid = old_rowid.unwrap();
+    if new_rowid.is_some_and(|id| id != old_rowid) || doc_id_col.is_some_and(|id| id != old_rowid) {
+        return Err("doc_id is assigned by ragite".to_string());
+    }
+    let text = require_text(text)?;
+    let source = source.unwrap_or_default();
+    let format = canonical_format(format.as_deref())?;
+    update_document(table, old_rowid, &text, &source, &format, hash)?;
+    if !p_rowid.is_null() {
+        unsafe { *p_rowid = old_rowid };
+    }
+    Ok(())
+}
+
+fn require_text(text: Option<String>) -> Result<String, String> {
+    match text {
+        Some(text) if !text.is_empty() => Ok(text),
+        Some(_) => Err("text is empty".to_string()),
+        None => Err("text is required".to_string()),
+    }
+}
+
+fn require_model(table: &Vtab) -> Result<&'static BuiltinModel, String> {
+    if !table.model_ok {
+        return Err(format!("model cannot be loaded: {TECHNICAL_ID}"));
+    }
+    builtin_model()
+}
+
+fn canonical_format(format: Option<&str>) -> Result<String, String> {
+    let Some(format) = format else {
+        return Ok("text/plain".to_string());
+    };
+    match format.to_ascii_lowercase().as_str() {
+        "text/plain" => Ok("text/plain".to_string()),
+        "text/markdown" => Ok("text/markdown".to_string()),
+        "text/html" => Ok("text/html".to_string()),
+        "application/vnd.docling.document+json" => {
+            Ok("application/vnd.docling.document+json".to_string())
+        }
+        other => Err(format!("format is not accepted: {other}")),
+    }
+}
+
+fn insert_document(
+    table: &Vtab,
+    text: &str,
+    source: &str,
+    format: &str,
+    hash: &str,
+) -> Result<i64, String> {
+    let documents = sql::qualified(&table.schema, &format!("{}_documents", table.doc_name));
+    let stmt = Stmt::prepare(
+        table.db,
+        &format!("INSERT INTO {documents} (source, text, format, hash) VALUES (?1, ?2, ?3, ?4)"),
+    )?;
+    stmt.bind_text(1, source)?;
+    stmt.bind_text(2, text)?;
+    stmt.bind_text(3, format)?;
+    stmt.bind_text(4, hash)?;
+    stmt.step()?;
+    let doc_id = sql::last_insert_rowid(table.db);
+    write_chunks(table, doc_id, text, format)?;
+    Ok(doc_id)
+}
+
+fn write_chunks(table: &Vtab, doc_id: i64, text: &str, format: &str) -> Result<(), String> {
+    let _ = format;
+    let model = builtin_model()?;
+    let chunks = chunk_plain(text);
+    for chunk in chunks {
+        insert_chunk(table, doc_id, &chunk, model)?;
+    }
+    Ok(())
+}
+
+fn insert_chunk(
+    table: &Vtab,
+    doc_id: i64,
+    chunk: &Chunk,
+    model: &BuiltinModel,
+) -> Result<(), String> {
+    let rows = sql::qualified(&table.schema, &format!("{}_chunk_rows", table.doc_name));
+    let stmt = Stmt::prepare(
+        table.db,
+        &format!(
+            "INSERT INTO {rows} (doc_id, start, end, heading_path, text, meta_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
+        ),
+    )?;
+    stmt.bind_i64(1, doc_id)?;
+    stmt.bind_i64(2, chunk.start as i64)?;
+    stmt.bind_i64(3, chunk.end as i64)?;
+    stmt.bind_text(4, &heading_path_json(&chunk.heading_path))?;
+    stmt.bind_text(5, &chunk.text)?;
+    if let Some(meta) = &chunk.meta_json {
+        stmt.bind_text(6, meta)?;
+    } else {
+        stmt.bind_null(6)?;
+    }
+    stmt.step()?;
+    let chunk_id = sql::last_insert_rowid(table.db);
+    let blob = model.embed_blob(&chunk.text, Role::Passage);
+    let vec = sql::qualified(&table.schema, &format!("{}_vec", table.doc_name));
+    let stmt = Stmt::prepare(
+        table.db,
+        &format!("INSERT INTO {vec} (rowid, embedding) VALUES (?1, ?2)"),
+    )?;
+    stmt.bind_i64(1, chunk_id)?;
+    stmt.bind_blob(2, &blob)?;
+    stmt.step()?;
+    let fts = sql::qualified(&table.schema, &format!("{}_fts", table.doc_name));
+    let stmt = Stmt::prepare(
+        table.db,
+        &format!("INSERT INTO {fts} (rowid, text) VALUES (?1, ?2)"),
+    )?;
+    stmt.bind_i64(1, chunk_id)?;
+    stmt.bind_text(2, &chunk.text)?;
+    stmt.step()?;
+    Ok(())
+}
+
+fn delete_document(table: &Vtab, doc_id: i64) -> Result<(), String> {
+    delete_chunks(table, doc_id)?;
+    let documents = sql::qualified(&table.schema, &format!("{}_documents", table.doc_name));
+    let stmt = Stmt::prepare(table.db, &format!("DELETE FROM {documents} WHERE doc_id = ?1"))?;
+    stmt.bind_i64(1, doc_id)?;
+    stmt.step()?;
+    Ok(())
+}
+
+fn delete_chunks(table: &Vtab, doc_id: i64) -> Result<(), String> {
+    let rows = sql::qualified(&table.schema, &format!("{}_chunk_rows", table.doc_name));
+    let stmt = Stmt::prepare(table.db, &format!("SELECT chunk_id FROM {rows} WHERE doc_id = ?1"))?;
+    stmt.bind_i64(1, doc_id)?;
+    let mut ids = Vec::new();
+    while stmt.step()? {
+        ids.push(stmt.column_i64(0));
+    }
+    let vec = sql::qualified(&table.schema, &format!("{}_vec", table.doc_name));
+    let fts = sql::qualified(&table.schema, &format!("{}_fts", table.doc_name));
+    for id in ids {
+        let stmt = Stmt::prepare(table.db, &format!("DELETE FROM {vec} WHERE rowid = ?1"))?;
+        stmt.bind_i64(1, id)?;
+        stmt.step()?;
+        let stmt = Stmt::prepare(table.db, &format!("DELETE FROM {fts} WHERE rowid = ?1"))?;
+        stmt.bind_i64(1, id)?;
+        stmt.step()?;
+    }
+    let stmt = Stmt::prepare(table.db, &format!("DELETE FROM {rows} WHERE doc_id = ?1"))?;
+    stmt.bind_i64(1, doc_id)?;
+    stmt.step()?;
+    Ok(())
+}
+
+fn update_document(
+    table: &Vtab,
+    doc_id: i64,
+    text: &str,
+    source: &str,
+    format: &str,
+    hash: Option<String>,
+) -> Result<(), String> {
+    let documents = sql::qualified(&table.schema, &format!("{}_documents", table.doc_name));
+    let stmt = Stmt::prepare(
+        table.db,
+        &format!("SELECT text, format, hash FROM {documents} WHERE doc_id = ?1"),
+    )?;
+    stmt.bind_i64(1, doc_id)?;
+    if !stmt.step()? {
+        return Err(format!("document was not found: {doc_id}"));
+    }
+    let old_text = stmt.column_text(0).unwrap_or_default();
+    let old_format = stmt.column_text(1).unwrap_or_default();
+    let old_hash = stmt.column_text(2).unwrap_or_default();
+    let hash = hash.unwrap_or_else(|| sha256_hex(text));
+    let rechunk = old_text != text || old_format != format;
+    if rechunk {
+        require_model(table)?;
+    }
+    let stmt = Stmt::prepare(
+        table.db,
+        &format!("UPDATE {documents} SET source = ?1, text = ?2, format = ?3, hash = ?4 WHERE doc_id = ?5"),
+    )?;
+    stmt.bind_text(1, source)?;
+    stmt.bind_text(2, text)?;
+    stmt.bind_text(3, format)?;
+    stmt.bind_text(4, &hash)?;
+    stmt.bind_i64(5, doc_id)?;
+    stmt.step()?;
+    if rechunk {
+        delete_chunks(table, doc_id)?;
+        write_chunks(table, doc_id, text, format)?;
+    }
+    let _ = old_hash;
+    Ok(())
+}
+
+fn value_is_null(value: *mut sqlite3_value) -> bool {
+    value.is_null() || unsafe { sqlite3_value_type(value) } == SQLITE_NULL
+}
+
+fn value_i64(value: *mut sqlite3_value) -> Option<i64> {
+    if value_is_null(value) {
+        return None;
+    }
+    let kind = unsafe { sqlite3_value_type(value) };
+    if kind == SQLITE_INTEGER || kind == SQLITE_FLOAT {
+        Some(unsafe { sqlite3_value_int64(value) })
+    } else {
+        None
+    }
+}
+
+fn value_text(value: *mut sqlite3_value) -> Option<String> {
+    if value_is_null(value) {
+        return None;
+    }
+    unsafe {
+        let kind = sqlite3_value_type(value);
+        if kind != SQLITE_TEXT && kind != libsqlite3_sys::SQLITE_BLOB {
+            if kind == SQLITE_INTEGER || kind == SQLITE_FLOAT {
+                return Some(sqlite3_value_int64(value).to_string());
+            }
+            return None;
+        }
+        let ptr = sqlite3_value_text(value);
+        if ptr.is_null() {
+            return None;
+        }
+        let n = sqlite3_value_bytes(value) as usize;
+        let bytes = std::slice::from_raw_parts(ptr.cast::<u8>(), n);
+        Some(String::from_utf8_lossy(bytes).into_owned())
+    }
+}

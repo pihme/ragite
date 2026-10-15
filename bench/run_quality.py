@@ -105,7 +105,10 @@ def main() -> None:
     modes = {
         "hybrid": "SELECT source FROM docs_chunks WHERE docs_chunks MATCH ? LIMIT %d" % depth,
         "vector": (
-            "SELECT c.source FROM docs_vec v JOIN docs_chunks c ON c.rowid = v.rowid "
+            # Join the indexed shadow tables, not docs_chunks: that virtual table
+            # has no rowid lookup, so a join to it scans every Chunk per hit.
+            "SELECT d.source FROM docs_vec v JOIN docs_chunk_rows c ON c.chunk_id = v.rowid "
+            "JOIN docs_documents d ON d.doc_id = c.doc_id "
             "WHERE v.embedding MATCH ragite_embed('docs', ?, 'query') AND k = %d ORDER BY v.distance" % depth
         ),
     }

@@ -1,6 +1,7 @@
 //! Chunking, embedding, and fusion for ragite. This crate does not link SQLite.
 
 mod chunk;
+mod html;
 mod model;
 
 pub use chunk::{Chunk, chunk_docling, chunk_html, chunk_markdown, chunk_plain};

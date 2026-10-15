@@ -33,9 +33,9 @@ pub fn chunk_markdown(text: &str) -> Vec<Chunk> {
     chunk_plain(text)
 }
 
-/// HTML rules replace this body. Until then the plain cutter runs.
+/// Cut stored HTML into chunks of visible text. Offsets are scalar indexes in `text`.
 pub fn chunk_html(text: &str) -> Vec<Chunk> {
-    chunk_plain(text)
+    crate::html::cut(text)
 }
 
 /// Docling rules replace this body. Until then the plain cutter runs.

@@ -10,9 +10,11 @@ ragite is an embeddable retrieval component for retrieval-augmented generation (
 
 ```sql
 SELECT load_extension('ragite');
-CREATE VIRTUAL TABLE docs USING ragite(model='default');
-INSERT INTO docs(text, source) VALUES ('# Installation ...', 'manual.md');
-SELECT chunk, source FROM docs WHERE docs MATCH 'How do I install it?' LIMIT 5;
+CREATE VIRTUAL TABLE docs USING ragite(model='<technical_id>');
+INSERT INTO docs(text, source, format)
+VALUES ('# Installation ...', 'manual.md', 'text/markdown');
+SELECT text, source FROM docs WHERE source = 'manual.md';
+SELECT chunk, source, score FROM docs_chunks WHERE docs_chunks MATCH 'How do I install it?' LIMIT 5;
 ```
 
 (Planned interface; nothing is implemented yet.)
@@ -20,15 +22,21 @@ SELECT chunk, source FROM docs WHERE docs MATCH 'How do I install it?' LIMIT 5;
 ## Goal
 
 - One file, in process, no server: documents, chunks, vectors and full-text index live in the same SQLite database.
-- Write and search through one virtual table; `INSERT`, `UPDATE`, `DELETE` and `ROLLBACK` keep everything consistent.
+- Write through the document table and search documents or chunks; `INSERT`, `UPDATE`, `DELETE` and `ROLLBACK` keep everything consistent.
 - Runs well on a CPU, with a built-in default embedding model and the option to bring your own.
 - Core in Rust, separate from the SQLite layer, so a Rust library stays possible later.
 
-Out of scope: parsing source formats (PDF, Office, ...), answer generation and evaluation. Input is plain text, Markdown, HTML or DoclingDocument JSON.
+Out of scope: parsing source formats (PDF, Office, ...), answer generation and evaluation. Input is `text/plain`, `text/markdown`, `text/html`, or a DoclingDocument.
+
+## Limitations
+
+The chunker, the scoring algorithm, and the other presets are fixed. You cannot change how text is cut, how scores are combined, or similar choices from SQL. A build behaves the same way for every caller.
+
+If you want different presets, fork the repository and change the requirements.
 
 ## Status
 
-See [ROADMAP.md](ROADMAP.md) for what versions 1.0 and 2 will deliver.
+See [ROADMAP.md](ROADMAP.md) for what versions 1.0 and 2.0 will deliver.
 
 Pre-1.0, specification only. There is no code, no release and no package yet. The design lives in [SPEC.md](SPEC.md); the default embedding model is still open and will be chosen by benchmark.
 

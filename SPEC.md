@@ -17,7 +17,7 @@ ragite is an embeddable, CPU-friendly retrieval component. It splits text into c
 
 ## 3. Scope and non-goals
 
-- **REQ-7** Accepted input: plain text, Markdown, HTML and DoclingDocument JSON.
+- **REQ-7** Accepted input is a media type on the Document: `text/plain`, `text/markdown`, `text/html`, or a DoclingDocument. Do not reopen.
 - **REQ-8** Not in scope: parsing source formats (PDF, Office, scans), answer generation (LLM calls) and evaluation. Users combine ragite with tools such as Docling (parsing), a local LLM runtime (generation) or Ragas (evaluation).
 - Reranking is not part of the first version; it may be added later as an option.
 
@@ -27,66 +27,165 @@ Example (planned):
 
 ```sql
 SELECT load_extension('ragite');
-CREATE VIRTUAL TABLE docs USING ragite(model='default');
-INSERT INTO docs(text, source) VALUES ('# Installation ...', 'manual.md');
-SELECT chunk, source FROM docs WHERE docs MATCH 'How do I install it?' LIMIT 5;
+CREATE VIRTUAL TABLE docs USING ragite(model='<technical_id>');
+INSERT INTO docs(text, source, format)
+VALUES ('# Installation ...', 'manual.md', 'text/markdown');
+SELECT doc_id, source, score FROM docs
+WHERE docs MATCH 'How do I install it?' AND source = 'manual.md' LIMIT 5;
+SELECT chunk, source, score FROM docs_chunks
+WHERE docs_chunks MATCH 'How do I install it?' LIMIT 5;
 ```
 
 The virtual table follows the methods in [sqlite.org/vtab](https://sqlite.org/vtab.html).
 
+A write addresses one Document: the `text` value is the whole input, and ragite stores that text on the Document and cuts it into Chunks. The Document table returns the stored text. `source` is an opaque label the application supplies, such as a path, a URL, or a title; ragite stores it and returns it with each Chunk. The same Source may belong to more than one Document. The indexed bytes are the `text` value. ragite assigns each Document a `doc_id`. `UPDATE` and `DELETE` name the Document by `doc_id`. A `WHERE` clause on another column selects every matching Document. Creating `<name>` also creates a read-only companion `<name>_chunks`. `MATCH` on `<name>` returns each matching Document once, ranked by its best Chunk. `MATCH` on `<name>_chunks` returns Chunks. Do not reopen.
+
 ### 4.1 Creating a table
 
-- **REQ-9** `CREATE VIRTUAL TABLE <name> USING ragite(model=...)` creates the table and its shadow tables (section 5) in the same database file. `model='default'` selects the built-in model.
+- **REQ-9** `CREATE VIRTUAL TABLE <name> USING ragite` creates the Document table, the read-only companion `<name>_chunks`, and the shadow tables (section 5) in the same database file. One database may hold several such tables. Each table's shadow tables are prefixed by `<name>`. The companion has no shadow tables of its own. `model` may be omitted (REQ-62). When it is present, it is the Model's technical identifier (REQ-46). Do not reopen.
+- **REQ-62** When `CREATE VIRTUAL TABLE` omits `model`, ragite binds the Table to the technical identifier of the build's default Model. The stored value is that technical identifier. The word `default` is not a model name. An empty `model` value fails the statement. Do not reopen.
+- **REQ-39** `CREATE VIRTUAL TABLE` fails and leaves nothing behind when the Model cannot be loaded, when `<name>_chunks` already exists, or when one of the shadow names already exists. A failed create does not leave a Document table, a companion, or shadow tables. Do not reopen.
 
 ### 4.2 INSERT
 
 - **REQ-10** An `INSERT` is handled in `xUpdate`: ragite splits the text into chunks, computes the embeddings and writes the document, its chunks, the vectors (sqlite-vec) and the full-text rows (FTS5).
+- **REQ-35** An `INSERT` or `UPDATE` whose `text` has no characters fails the statement and leaves the database unchanged. Whitespace is still text. ragite does not store a Document with empty text. Do not reopen.
+- **REQ-37** An `INSERT` must supply `text`. `source`, `format`, and `hash` may be omitted. Omitting `source`, or supplying `''`, stores an empty Source. Omitting `text` fails the statement. NULL in an optional column follows REQ-73. `doc_id` and `score` are not accepted on `INSERT` or `UPDATE`. ragite assigns `doc_id`. On `UPDATE`, the caller may set `text`, `source`, `format`, and `hash`. Do not reopen.
+- **REQ-72** ragite compares `format` to the four accepted types without regard to letter case and stores the canonical lowercase type. A parameter, such as `; charset=utf-8`, fails the statement. Do not reopen.
+- **REQ-73** NULL in an optional column is the same as omitting it. NULL `source` stores an empty Source. NULL `format` stores `text/plain`. NULL `hash` makes ragite compute the SHA-256. NULL `text` fails the statement. On `UPDATE`, assigning NULL to `source`, `format`, or `hash` sets that same default, and a NULL `format` re-chunks. NULL `model` on `CREATE VIRTUAL TABLE` selects the build's default Model (REQ-62). Do not reopen.
+- **REQ-36** An `INSERT` or `UPDATE` that produces no Chunks still stores the Document. It writes no Chunk rows, vectors, or full-text rows. A `MATCH` search does not find it. A query on ordinary columns does return it, for example `WHERE source = '...'`. This is expected, including for text that is only `script` and `style`, and for a DoclingDocument whose items have no characters. A Markdown or HTML Document whose only content is headings has one Chunk per heading (REQ-50). Do not reopen.
+- **REQ-31** The Document stores the inserted `text` and the Document table returns it. `start` and `end` count Unicode scalar values, the same units as a Rust `char`. They do not count UTF-8 bytes or grapheme clusters. For plain text and Markdown, they count in the stored text and the Chunk text is the exact slice between those offsets. For a DoclingDocument they follow REQ-20. Do not reopen.
+- **REQ-34** The Document table returns `doc_id`, `text`, `source`, `format`, `hash`, and `score`. `score` is the Score column. Its `rowid` is `doc_id`. The Document has no `meta_json`. `hash` is an opaque label, like `source`. The caller may set it on `INSERT` and change it with `UPDATE`. ragite stores a caller-supplied value as given and does not compare it to the text or use it in any decision. When an `INSERT` omits `hash`, ragite stores the SHA-256 of the stored text as UTF-8, written as 64 hex characters. An `UPDATE` that does not set `hash` leaves it unchanged, including when the text changes. Changing `hash` recomputes nothing. Do not reopen.
+- **REQ-32** `format` is a media type with no parameters, stored on the Document. `<name>_chunks` does not expose it. When it is omitted, ragite stores `text/plain` and does not infer the type from the text. The only accepted values are `text/plain`, `text/markdown`, `text/html`, and `application/vnd.docling.document+json`. Matching ignores letter case and stores the canonical lowercase type (REQ-72). Any other value, including a parameter, fails the statement. Do not reopen.
 - **REQ-11** All writes of one statement happen in the caller's transaction; a `ROLLBACK` undoes all of them.
 
 ### 4.3 UPDATE
 
-- **REQ-12** An `UPDATE` that changes the text deletes the document's old chunks, vectors and FTS rows, re-chunks and re-embeds the new text, in the same transaction.
-- **REQ-13** An `UPDATE` that changes only metadata (for example `source`) recomputes nothing.
+- **REQ-12** An `UPDATE` that changes the text or the format deletes the document's old chunks, vectors and FTS rows, re-chunks and re-embeds, in the same transaction. A format change uses the stored text with the new media type. An invalid format fails the statement and leaves the Document unchanged. Do not reopen.
+- **REQ-13** An `UPDATE` that changes only metadata that does not affect how the text is cut (for example `source` or `hash`) recomputes nothing.
 
 ### 4.4 DELETE
 
 - **REQ-14** A `DELETE` removes the document with all its chunks, vectors and FTS rows, in the same transaction.
+- **REQ-29** ragite assigns `doc_id` when a Document is inserted (REQ-57). The same Source may belong to more than one Document. `UPDATE` and `DELETE` name the Document by `doc_id`. A `WHERE` clause on another column, such as `source`, selects every matching Document. Do not reopen.
+- **REQ-57** `doc_id` and Chunk id are positive integers. Documents and Chunks have separate sequences (REQ-64). After a row is deleted, that id is not assigned again in its sequence. An update that rewrites a Document's Chunks gives those Chunks new ids. Each sequence is a SQLite `INTEGER PRIMARY KEY AUTOINCREMENT` (REQ-84). Do not reopen.
+- **REQ-84** A deleted id stays unused, so each sequence is SQLite `AUTOINCREMENT`. A statement that fails, or a transaction that is rolled back, still consumes the ids it allocated. That is SQLite's behavior for `AUTOINCREMENT`: the `sqlite_sequence` update is not rolled back. ragite does not restore the counter. Do not reopen.
+- **REQ-64** `doc_id` values are unique among Documents in the Table. Chunk ids are unique among Chunks in the Table. The same number may be both a `doc_id` and a Chunk id. Each sequence assigns the next value it has not used. Do not reopen.
 
 ### 4.5 Search
 
-- **REQ-15** `xBestIndex` recognises `MATCH` and `LIMIT`. `xFilter` embeds the query and combines vector search and BM25 full-text search (for example with Reciprocal Rank Fusion). `xNext`, `xEof`, `xColumn` and `xRowid` return the hits.
-- **REQ-16** Each hit exposes at least the chunk text and its source (section 5).
+The Score is the number Reciprocal Rank Fusion assigns to a Chunk. A higher Score is a better match. A Document's Score is the Score of its best Chunk. The Score column is the virtual-table column named `score`. It is present on both surfaces. On a `MATCH` query it carries that row's Score, and the rows come back best first. On any other query it is null. The caller does not pass a cutoff. Do not reopen.
+
+- **REQ-15** `xBestIndex` recognises `MATCH` and `LIMIT` on both surfaces. `xFilter` embeds the query and merges the vector ranking and the BM25 ranking with Reciprocal Rank Fusion, k = 60, both sides weighted equally. The vector ranking uses cosine similarity (REQ-66). The top row of each list has rank 1 (REQ-80). The caller does not pass weights. ragite takes the same fixed number of Chunks from each ranking before the fusion. The caller does not pass that depth. The number is chosen in the same benchmark as the default model and the chunk length (section 8.1). A Chunk that appears in only one list still takes part in the fusion. On the Document table, the result is one row per Document, ranked by its best Chunk. On `<name>_chunks`, the result is one row per Chunk. The Score column carries that Score for a `MATCH` and is null otherwise. Do not reopen.
+- **REQ-38** A `MATCH` without `LIMIT` returns every fused row. On `<name>_chunks` that is every fused Chunk. On the Document table that is every matching Document. The candidate depth is the only cap ragite applies. The caller uses `LIMIT` to take fewer rows. Do not reopen.
+- **REQ-43** A `MATCH` whose query has no characters returns no rows and does not fail. ragite does not run the Model for that query. A query that is only whitespace is a real query and is embedded as given. Do not reopen.
+- **REQ-41** A `MATCH` returns rows ordered by Score, highest first. When two Scores are equal, the Document table orders by `doc_id` ascending. The companion orders by `doc_id` ascending, then by Chunk id ascending. Do not reopen.
+- **REQ-42** With no `MATCH`, the Document table returns rows in `doc_id` ascending order. The companion returns rows in `doc_id` ascending order, then Chunk id ascending. Chunk ids follow emission order (REQ-52). `score` is null. A `WHERE` clause on an ordinary column keeps that order. Do not reopen.
+- **REQ-16** Each Chunk row exposes `chunk`, `doc_id`, `source`, `start`, `end`, `heading_path`, `meta_json`, and `score`. Its `rowid` is the Chunk id (REQ-65). `heading_path` is a JSON array of strings, outermost heading first. A plain-text Chunk stores `[]`. `meta_json` is null except on a DoclingDocument Chunk, where it is the object in REQ-20. `score` is the Score column. Do not reopen.
+- **REQ-30** Creating `<name>` also creates the read-only virtual table `<name>_chunks`. `<name>` has one row per Document and its `rowid` is `doc_id`. The companion's `rowid` is the Chunk id (REQ-65). Writes go to `<name>`. A normal predicate such as `source = '...'` selects every matching Document. `MATCH` on `<name>` returns each matching Document once, ranked by its best Chunk. `MATCH` on `<name>_chunks` returns Chunks. Writes on `<name>_chunks` fail. Do not reopen.
+- **REQ-65** On the Document table, `rowid` is `doc_id`. On `<name>_chunks`, `rowid` is the Chunk id. Neither surface has a `chunk_id` column. Do not reopen.
+- **REQ-78** The Document table declares `doc_id INTEGER`, `text TEXT`, `source TEXT`, `format TEXT`, `hash TEXT`, and `score REAL`. The companion declares `chunk TEXT`, `doc_id INTEGER`, `source TEXT`, `start INTEGER`, `end INTEGER`, `heading_path TEXT`, `meta_json TEXT`, and `score REAL`. Do not reopen.
+- **REQ-82** A `MATCH` constraint on the Document table or on `<name>_chunks` runs the hybrid search whichever column it is written on. `docs MATCH 'q'`, `text MATCH 'q'`, and `chunk MATCH 'q'` are the same search. Do not reopen.
+- **REQ-66** The vector ranking uses cosine similarity. Reciprocal Rank Fusion uses those ranks, with k = 60 and equal weights (REQ-15). Do not reopen.
+- **REQ-80** The top row of a list has rank 1, so its term is `1/61`. A Chunk that appears in both lists sums its two terms. A Document's Score is its best Chunk's Score. Do not reopen.
+- **REQ-75** A `MATCH` string is plain text. ragite searches the FTS5 index for that text as one phrase, with any quotation marks in the text escaped so they stay inside the phrase. `AND`, `OR`, `NOT`, `*`, and quotation marks are not operators. The vector side embeds that same plain text, with the query prefix. Version 1 accepts no FTS5 query syntax from the caller. Do not reopen.
+- **REQ-61** The text embedded for a Chunk is the passage prefix followed by the Chunk text. The text embedded for a `MATCH` query is the query prefix followed by the query text. FTS indexes the Chunk text and searches the query text as one plain-text phrase, without a prefix (REQ-75). The heading path and `meta_json` are not part of either embedding or of the FTS index. Do not reopen.
 - Further `WHERE` filters, `JOIN`s with application tables and `ORDER BY` are left to SQLite.
 
 ### 4.6 Helper function
 
-- **REQ-17** A scalar function `ragite_embed(text)` returns the embedding of a text with the table's model, for use in the application's own tables.
+- **REQ-17** `ragite_embed(table_name, text, role)` returns the embedding of `text` using the Model of that Document table, for use in the application's own tables. `table_name` is the Document table, not the companion. A name that is not a ragite Document table fails the statement. `ragite_embed_model(model_identifier, text, role)` returns the embedding of `text` using that Model directly. `model_identifier` is the Model's technical identifier, the same string `CREATE VIRTUAL TABLE` accepts for `model`. The word `default` is not accepted. A path or a URL fails the statement. An unknown identifier fails the statement. `role` is `query` or `passage`. The two functions are separate because a table name and a model id are both text. Each returns the float32 BLOB from REQ-69. Do not reopen.
+- **REQ-45** Each Model has a query prefix and a passage prefix. Either string may be empty. The prefixes are hardcoded with the Model and are not stored in the database. For the built-in default model they are in the code. For a model linked at build time, the provider of that model also provides them (REQ-23). `CREATE VIRTUAL TABLE` does not take prefix arguments. ragite adds the passage prefix when it embeds a Chunk, and the query prefix when it embeds a `MATCH` query. FTS indexes the Chunk text and searches the query text without a prefix (REQ-61). The prefix is not part of the stored text or of the text passed to an embed function. `ragite_embed` and `ragite_embed_model` require the `role` argument and add that prefix. Omitting `role`, or any value other than `query` or `passage`, fails the statement. Version 1 has no further prefix role. Do not reopen.
+- **REQ-46** A version 1 build contains one Model. The default Model is chosen at build time. `list_models()` and `get_default_model()` return a model description: a human-readable name, and a technical identifier `name@revision`. The revision is the full commit SHA of the bundled weights for a Hugging Face model, or the revision the provider supplied for a model linked at build time. The caller does not pass the revision. `list_models()` returns that one Model. `get_default_model()` returns it as the build's default. Insert and embed take the description and use its technical identifier. In SQL, `ragite_list_models()` and `ragite_default_model()` return the columns `name` and `technical_id`. `CREATE VIRTUAL TABLE` takes `technical_id` when `model` is present, and may omit `model` (REQ-62). `ragite_embed_model` takes `technical_id`. The word `default` is not a model name. The value stored with the Table is the technical identifier. A later build with the same name and a different revision does not embed or search that Table. `SELECT` of stored columns still works. Do not reopen.
+- **REQ-47** `ragite_list_models()` and `ragite_default_model()` work after the extension is loaded, before any ragite table exists. They describe the Model built into that extension. They do not read a database table. `ragite_embed_model` also works before any ragite table exists (REQ-77). Do not reopen.
+- **REQ-67** `ragite_table_model(table_name)` returns the technical identifier stored for that Table. It works when that Model cannot be loaded. A name that is not a ragite Document table fails the statement. Do not reopen.
+- **REQ-44** `ragite_embed` and `ragite_embed_model` fail when `text` has no characters. They do not return a vector. A text that is only whitespace is embedded as given. Do not reopen.
+- **REQ-54** When ragite fails a statement, the SQLite error message names the check that failed. When the offending value is short, the message includes it: the format, the model identifier, the role, the table name, or the `schema_name`. The message leaves out document text, chunk text, vectors, and prefixes. REQ-53 is this rule for a DoclingDocument that fails its check. Do not reopen.
+- **REQ-69** `ragite_embed` and `ragite_embed_model` return a BLOB of little-endian IEEE-754 float32 values, one per dimension, with no header. The BLOB length is 4 times the Model's dimension. That is the byte layout sqlite-vec stores. Do not reopen.
+- **REQ-77** `ragite_embed_model` works after the extension loads, before any ragite table exists. It uses the built-in Model named by the technical identifier and does not read a database table. Do not reopen.
+- **REQ-81** `ragite_embed`, `ragite_embed_model`, `ragite_list_models`, `ragite_default_model`, and `ragite_table_model` are deterministic. A generated column or an index may call them. Do not reopen.
 
 ### 4.7 Use from other languages
 
 - **REQ-18** The extension can be loaded from Python (`sqlite3` with `enable_load_extension`), Go and Node.js. Distribution is planned as prebuilt binaries per platform with thin pip/npm/Go packages, as sqlite-vec does. (Publishing is not part of the first version.)
+- **REQ-87** The load entry point is `sqlite3_ragite_init`. `SELECT load_extension('ragite')` loads that symbol. Do not reopen.
 
 ## 5. Source linkage: documents and chunks
 
-Draft schema, all in the same database file:
+Rules that apply to every format are in section 5.1. Each media type has its own subsection. When one requirement covers more than one format, each subsection states the part that applies there, under the same ID.
+
+### 5.1 Common to every format
+
+Draft schema of one Table, stored in the same database file. These names are the column shape. On disk each shadow table is prefixed by the Document table's name (`docs_documents`, `docs_chunk_rows`, `docs_vec`, `docs_fts` for a table named `docs`), so several Tables can share a file. The public companion keeps the name `<name>_chunks`, so the chunk shadow table is `<name>_chunk_rows`. The companion and the shadow tables are created in the virtual table's own database, including `temp` and an attached database (REQ-76). Do not reopen.
 
 ```text
-documents(doc_id, source, format, meta_json, hash)
-chunks(chunk_id INTEGER PRIMARY KEY, doc_id, start, end, heading_path, text, meta_json)
-chunk_vec   -- sqlite-vec vec0 table, rowid = chunk_id
-chunk_fts   -- FTS5 table, rowid = chunk_id
+<name>_documents(doc_id, source, text, format, hash)
+<name>_chunk_rows(chunk_id INTEGER PRIMARY KEY, doc_id, start, end, heading_path, text, meta_json)
+<name>_vec   -- sqlite-vec vec0, embedding float[dimension] distance_metric=cosine, rowid = chunk_id
+<name>_fts   -- FTS5 table, rowid = chunk_id
 ```
 
-- **REQ-19** Every chunk records its document, its character offsets (`start`, `end`) in the input text and its heading path.
-- **REQ-20** For DoclingDocument input, page, section and element reference are stored in the chunk's `meta_json` (DoclingDocument carries reading order and provenance such as page and bounding box).
-- **REQ-21** The vector table and the FTS5 table use `rowid = chunk_id`, so a KNN search (`WHERE embedding MATCH ?`) joined with `chunks` and `documents` yields text, source and position.
+- **REQ-76** The companion and the shadow tables are created in the same database as the virtual table. `main`, `temp`, and an attached database all work. Their names are unqualified inside that database. Do not reopen.
+- **REQ-19** Every chunk records its document, its `start` and `end`, and its heading path. `start` and `end` follow REQ-31 and the format's subsection. The heading path is a JSON array of strings, outermost heading first (REQ-56). For every format other than a DoclingDocument, `meta_json` is null (REQ-20). Do not reopen.
+- **REQ-31** The Document stores the inserted `text` and the Document table returns it. `start` and `end` count Unicode scalar values, the same units as a Rust `char`. They do not count UTF-8 bytes or grapheme clusters. The format subsections say what text those offsets slice. Do not reopen.
+- **REQ-33** ragite chooses where to cut. The caller does not pass a chunk size. A Chunk stays inside one section. A unit longer than the length limit is split by that limit, and the overlap stays inside that unit (REQ-70). The length limit and the overlap are fixed for version 1 and chosen in the same benchmark as the default model (section 8.1). Each format's cuts are in sections 5.2–5.5. Do not reopen.
+- **REQ-70** When ragite splits a paragraph, code block, or Docling item, it copies a run of Unicode scalar values from the end of one piece onto the start of the next. Both Chunk texts include that run, and their `start` and `end` ranges overlap. The first piece has no copied prefix. The overlap stays inside that paragraph, block, or item. The benchmark chooses how many scalars are copied. Do not reopen.
+- **REQ-52** Chunk ids increase in the order ragite emits Chunks. A query with no `MATCH` lists a Document's Chunks in that order (REQ-42). Sections 5.2–5.5 give that order for each format. Do not reopen.
+- **REQ-21** The vector table and the FTS5 table use `rowid = chunk_id`, so a KNN search (`WHERE embedding MATCH ?`) joined with that Table's chunks and documents yields text, source and position.
+- **REQ-28** The full-text table uses the FTS5 `unicode61` tokenizer with no stemming, for every language in the Table. Do not reopen.
+
+### 5.2 `text/plain`
+
+- **REQ-31** For plain text, `start` and `end` count in the stored text and the Chunk text is the exact slice between those offsets.
+- **REQ-19** A plain-text Chunk stores heading path `[]`.
+- **REQ-60** A newline is `\n` or `\r\n`. A blank line is a line ending, optional spaces or tabs, then another line ending. Stored text and exact slices keep the original characters, including `\r`. Do not reopen.
+- **REQ-55** A paragraph break is a blank line (REQ-60). A single newline stays inside the paragraph. The blank line itself is not a Chunk. `text/plain` emits one Chunk per paragraph. A paragraph longer than the length limit is split by that limit, and the overlap stays inside that paragraph (REQ-70).
+- **REQ-52** Chunks are emitted in paragraph order.
+
+### 5.3 `text/markdown`
+
+- **REQ-31** For Markdown, `start` and `end` count in the stored text and the Chunk text is the exact slice between those offsets.
+- **REQ-71** A Markdown heading is a line that may start with up to three spaces, then one to six `#` marks, a space, and a title. Closing `#` marks may follow. Seven or more `#` marks, or no space after the marks, leave the line as a normal paragraph line. The heading Chunk is the exact line (REQ-50). Do not reopen.
+- **REQ-50** Each heading is one Chunk, including when the Document has no other text. Its Chunk text is the exact heading line. The length limit does not split one heading into several Chunks. The heading path of a heading Chunk is the headings above it. Text that follows a heading is further Chunks, and their heading path includes that heading. A heading whose text has no characters does not become a Chunk.
+- **REQ-56** Each string in `heading_path` is the heading's title. The leading `#` marks, the space after them, a line break, and any closing `#` marks stay out of the path. The heading Chunk's own text remains the exact line (REQ-50).
+- **REQ-55** The text between headings is cut at blank lines (REQ-60). A fenced code block is one paragraph (REQ-58). An indented code block is one paragraph (REQ-63). A paragraph longer than the length limit is split by that limit, and the overlap stays inside that paragraph (REQ-70).
+- **REQ-58** A fence that opens with `` ``` `` or `~~~` and runs through its matching close (REQ-83) is one paragraph. Lines inside it are not headings, and blank lines inside it are not paragraph breaks. The Chunk text is the exact slice, fences included. A block longer than the length limit is split inside that block, and the overlap stays inside it. Do not reopen.
+- **REQ-83** An opening fence is three or more backticks, or three or more tildes. A backtick fence may have an info string. The closing line is only that same marker, at least as long, with optional surrounding spaces. Tildes do not close backticks, and backticks do not close tildes. The info string stays in the exact slice. Do not reopen.
+- **REQ-63** A run of lines indented by four or more spaces is one paragraph, including a blank line that sits between those lines. A `#` on an indented line is not a heading. The Chunk text is the exact slice. A block longer than the length limit is split inside that block, and the overlap stays inside it. Do not reopen.
+- **REQ-52** Chunks are emitted in the order section 5.3 cuts them.
+
+### 5.4 `text/html`
+
+- **REQ-74** HTML element names match without regard to letter case. `script` and `style` are dropped in any letter case. `pre` keeps its spaces and line breaks in any letter case. Do not reopen.
+- **REQ-31** `start` and `end` mark the span in the stored HTML that produced that piece's visible text. The Chunk text is the visible text, except for a comment (REQ-79).
+- **REQ-50** Each `h1`–`h6` element is one Chunk, including when the Document has no other text. Its Chunk text is the visible text. The length limit does not split one heading into several Chunks. The heading path of a heading Chunk is the headings above it. Text that follows a heading is further Chunks, and their heading path includes that heading. A heading whose text has no characters does not become a Chunk.
+- **REQ-56** Each path entry is the visible text of the heading.
+- **REQ-55** One `p`, `li`, `pre`, `blockquote`, `td`, `th`, or `textarea` is one paragraph (REQ-85). A `br` stays inside it. A header cell is a paragraph Chunk. The heading path comes from `h1`–`h6`. An element that is not `script` or `style`, not a heading, and not one of those paragraph elements is walked into, and loose text directly inside it is one paragraph. Attribute values, including `alt` and `title`, are not Chunk text. A paragraph's Chunk text leaves out descendant headings and paragraph elements (REQ-59). A paragraph longer than the length limit is split by that limit, and the overlap stays inside that paragraph (REQ-70).
+- **REQ-59** An HTML paragraph's Chunk text includes its inline content, such as `a`, `em`, `strong`, `span`, `code`, and `br`. It leaves out the text of a descendant heading or paragraph element. Those descendants are their own Chunks. Do not reopen.
+- **REQ-68** Outside `pre` and `textarea`, a paragraph's visible text collapses each run of whitespace to one space and drops whitespace at the ends. Inside `pre` and `textarea`, spaces and line breaks stay as they are. Do not reopen.
+- **REQ-85** A `textarea` is one paragraph, and it keeps spaces and line breaks as `pre` does. A `title` element is a container. Loose text directly inside it is one paragraph, and that text collapses whitespace as text outside `pre` does. Do not reopen.
+- **REQ-86** In an element's visible text, character references are decoded as HTML decodes them, including numeric references. An unrecognized reference stays as written. A comment body is not decoded. Do not reopen.
+- **REQ-79** An HTML comment becomes one Chunk. It has no children: the comment body is not parsed as HTML. The Chunk text is the raw text between `<!--` and `-->`, and spaces and line breaks in that body stay as they are. `start` and `end` mark the whole comment in the stored HTML. A body with no characters produces no Chunk. A parent paragraph's Chunk text does not include the comment. The length limit does not split a comment. The heading path is the headings above the comment. A doctype produces no Chunk. A processing instruction produces no Chunk. Do not reopen.
+- **REQ-52** Chunks are emitted in document order, and a comment is emitted where it sits.
+
+### 5.5 `application/vnd.docling.document+json`
+
+- **REQ-53** The statement fails and the database stays unchanged unless `text` is a JSON object whose `schema_name` is `DoclingDocument`. A JSON object with that name is stored when the walk produces no Chunks. A missing `body` or `furniture` is an empty tree. Extra fields are ignored, and the `version` string is not checked. The SQLite error message follows REQ-54 and names the failed check: the text is not JSON, the JSON value is not an object, or `schema_name` is missing or is not `DoclingDocument`. When `schema_name` is present, the message includes its value. Do not reopen.
+- **REQ-49** Version 1 considers every content item. A text item, a table, a picture, and a key-value item can each become Chunks, in the body and in furniture, including a title or a section header. ragite does not drop an item because of its label or because it belongs to furniture. An item with no characters produces no Chunk (REQ-48). A title or a section header still fills the heading path of the Chunks under it. A furniture Chunk has a null `section` and a heading path of `[]`. Do not reopen.
+- **REQ-48** An element whose text has no characters does not become a Chunk. The statement still stores the Document and the Chunks from its other elements. An element whose text is only whitespace does become a Chunk. One empty element does not fail the statement. Do not reopen.
+- **REQ-51** ragite builds one string for each content item, and `start` and `end` count Unicode scalar values in that string (REQ-20). A text item uses its `text` field. A table uses its cells in reading order: cell texts in a row are separated by a tab, and rows are separated by a newline. An empty cell is an empty field between tabs. The caption stays on the caption text item. A key-value item uses one line per pair: the key, a tab, then the value. A picture contributes no image data, placeholder, or URI. Its caption and any other text items are Chunks on their own. An item whose string has no characters produces no Chunk (REQ-48). Do not reopen.
+- **REQ-20** `meta_json` is a JSON object with the keys `page`, `section`, and `element`. `page` is a page number, or null when the element has none. `section` is the section title, or null. `element` is the Docling element reference, such as `#/texts/3`, and it is how a caller finds that element in the stored JSON. `start` and `end` count Unicode scalar values in that element's text, and the Chunk text is the exact slice between them. They are not positions in the stored JSON. Do not reopen.
+- **REQ-56** Each path entry is the section title as Docling stores it.
+- **REQ-52** ragite walks the body tree in child order, then the furniture tree. It visits each content item in those trees once and emits that item's Chunks before it walks the item's children. A group is only a container: it adds no Chunk, and its children are visited in order. An item that is in neither tree adds no Chunk. Pieces of a long item stay together in that order.
+- **REQ-33** One Chunk is a slice of one item's text (REQ-51). The heading path is the section path for an item in the body. A long item is split by the length limit, and the overlap stays inside that item (REQ-70).
 
 ## 6. Model variants
 
 - **REQ-22** (a) **Built-in (default):** model files are embedded in the extension with `include_bytes!`, behind a Cargo feature that is on by default. Model2Vec models load with `model2vec-rs` (`StaticModel::from_bytes`), transformer models with candle.
-- **REQ-23** (b) **Own model at build time:** a model path is passed to the build through an environment variable (`build.rs` or `include_bytes!(env!(...))`); the default model is switched off with `--no-default-features`.
-- **REQ-24** (c) **External model at run time:** loaded from a local path or a URL (downloaded and cached locally); for Model2Vec via `StaticModel::from_pretrained`.
-- **REQ-25** The model ID is stored in the database, so ragite detects when a table is opened with a different model than it was built with.
+- **REQ-23** (b) **Own model at build time:** a model path is passed to the build through an environment variable (`build.rs` or `include_bytes!(env!(...))`); the default model is switched off with `--no-default-features`. The provider of that model also provides its human-readable name, the revision of the weights, and its query prefix and passage prefix.
+- **REQ-24** Version 1 does not load a model from a local path or a URL at run time. `model` is the technical identifier of the one Model built into that extension. A path or a URL fails `CREATE VIRTUAL TABLE` and fails `ragite_embed_model`. Do not reopen.
+- **REQ-25** The Model is set when the Table is created and is read-only after that. The stored value is the technical identifier from REQ-46. Version 1 does not re-embed a Table in place. Search, `INSERT`, an `UPDATE` of text or format, and `ragite_embed` for that Table fail when the stored Model cannot be loaded. `SELECT` of stored columns still works. Moving the Documents onto another Model is done by creating a new Table with that Model, copying the stored rows into it with `INSERT`, and dropping the old Table. `DROP TABLE <name>` drops the Document table, the companion `<name>_chunks`, and that Table's shadow tables. Do not reopen.
+- **REQ-40** `DROP TABLE <name>_chunks` fails and leaves both surfaces in place. Do not reopen.
 - Late chunking (embed the whole document, then pool per chunk) only makes sense for transformer models, not for Model2Vec; it is a possible later option.
 
 ### 6.1 Model criteria
@@ -103,7 +202,7 @@ Known licenses (from the design research, to be verified against real metadata w
 
 ### 8.1 Default model
 
-Which model is built in for variant (a) is decided during development by a benchmark (retrieval quality, CPU speed, size). Candidates (parameters, dimension and license from the Hugging Face model cards):
+Which model is built in for variant (a) is decided during development by a benchmark (retrieval quality, CPU speed, size). The same benchmark chooses version 1's chunk length limit, overlap (REQ-33), and the number of Chunks taken from each ranking before fusion (REQ-15). Candidates (parameters, dimension and license from the Hugging Face model cards):
 
 | Model | Parameters | Dim. | License | Kind |
 | --- | --- | --- | --- | --- |

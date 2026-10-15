@@ -10,3 +10,5 @@
 !.env.example
 # release.py output
 release-out/
+# Cargo
+/target

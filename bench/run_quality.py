@@ -35,7 +35,10 @@ def load_mteb(name: str, revision: str | None, max_docs: int | None):
 
     corpus = load_dataset(name, "corpus", revision=revision, split="corpus")
     queries = load_dataset(name, "queries", revision=revision, split="queries")
-    qrels = load_dataset(name, "default", revision=revision, split="test")
+    try:
+        qrels = load_dataset(name, "default", revision=revision, split="test")
+    except ValueError:  # e.g. GermanQuAD keeps its qrels in a sibling "<name>-qrels" repo
+        qrels = load_dataset(name + "-qrels", revision=revision, split="test")
     rel: dict[str, set[str]] = {}
     for r in qrels:
         if float(r["score"]) > 0:

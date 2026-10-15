@@ -69,7 +69,7 @@ A write addresses one Document: the `text` value is the whole input, and ragite 
 - **REQ-14** A `DELETE` removes the document with all its chunks, vectors and FTS rows, in the same transaction.
 - **REQ-29** ragite assigns `doc_id` when a Document is inserted (REQ-57). The same Source may belong to more than one Document. `UPDATE` and `DELETE` name the Document by `doc_id`. A `WHERE` clause on another column, such as `source`, selects every matching Document. Do not reopen.
 - **REQ-57** `doc_id` and Chunk id are positive integers. Documents and Chunks have separate sequences (REQ-64). After a row is deleted, that id is not assigned again in its sequence. An update that rewrites a Document's Chunks gives those Chunks new ids. Each sequence is a SQLite `INTEGER PRIMARY KEY AUTOINCREMENT` (REQ-84). Do not reopen.
-- **REQ-84** A deleted id stays unused, so each sequence is SQLite `AUTOINCREMENT`. A statement that fails, or a transaction that is rolled back, still consumes the ids it allocated. That is SQLite's behavior for `AUTOINCREMENT`: the `sqlite_sequence` update is not rolled back. ragite does not restore the counter. Do not reopen.
+- **REQ-84** A deleted id stays unused, so each sequence is SQLite `AUTOINCREMENT`. ragite does not keep a second counter and does not change `sqlite_sequence` itself. A failed statement and a rolled-back transaction follow SQLite: `sqlite_sequence` moves back with that work, so an id allocated only inside that work can be assigned again. Do not reopen.
 - **REQ-64** `doc_id` values are unique among Documents in the Table. Chunk ids are unique among Chunks in the Table. The same number may be both a `doc_id` and a Chunk id. Each sequence assigns the next value it has not used. Do not reopen.
 
 ### 4.5 Search

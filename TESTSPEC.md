@@ -499,8 +499,8 @@ Unless a case says otherwise:
 
 ## REQ-84
 
-- **TC-231** `BEGIN`, `INSERT` of a Document that has Chunks, `ROLLBACK` removes those rows, and the next `INSERT` receives a greater `doc_id` and greater Chunk ids than the ids allocated inside the transaction.
-- **TC-232** A statement that fails after allocating ids does not reuse those ids. `sqlite_sequence` is not moved backward.
+- **TC-231** `BEGIN`, `INSERT` of a Document that has Chunks, `ROLLBACK` removes those rows. The next `INSERT` follows SQLite `AUTOINCREMENT`. On a fresh Table that next `doc_id` and Chunk id are 1.
+- **TC-232** An `INSERT` of two rows whose second format is `text/csv` fails and leaves no Document. The next `INSERT` on that fresh Table receives `doc_id` 1.
 
 ## REQ-85
 

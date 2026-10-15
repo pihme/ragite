@@ -1,0 +1,69 @@
+# The 11 Model candidates from SPEC.md section 8.1.
+# hf = Hugging Face repo id, kind = model2vec | transformer.
+# Prefixes are what the model card asks for; the harness applies them.
+
+[[model]]
+name = "potion-base-8M"
+hf = "minishlab/potion-base-8M"
+kind = "model2vec"
+
+[[model]]
+name = "potion-base-32M"
+hf = "minishlab/potion-base-32M"
+kind = "model2vec"
+
+[[model]]
+name = "potion-retrieval-32M"
+hf = "minishlab/potion-retrieval-32M"
+kind = "model2vec"
+
+[[model]]
+name = "all-MiniLM-L6-v2"
+hf = "sentence-transformers/all-MiniLM-L6-v2"
+kind = "transformer"
+
+[[model]]
+name = "bge-small-en-v1.5"
+hf = "BAAI/bge-small-en-v1.5"
+kind = "transformer"
+query_prefix = "Represent this sentence for searching relevant passages: "
+
+[[model]]
+name = "e5-small-v2"
+hf = "intfloat/e5-small-v2"
+kind = "transformer"
+query_prefix = "query: "
+passage_prefix = "passage: "
+
+[[model]]
+name = "nomic-embed-text-v1.5"
+hf = "nomic-ai/nomic-embed-text-v1.5"
+kind = "transformer"
+query_prefix = "search_query: "
+passage_prefix = "search_document: "
+
+[[model]]
+name = "potion-multilingual-128M"
+hf = "minishlab/potion-multilingual-128M"
+kind = "model2vec"
+bonus = "multilingual"
+
+[[model]]
+name = "multilingual-e5-small"
+hf = "intfloat/multilingual-e5-small"
+kind = "transformer"
+query_prefix = "query: "
+passage_prefix = "passage: "
+bonus = "multilingual"
+
+[[model]]
+name = "paraphrase-multilingual-MiniLM-L12-v2"
+hf = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+kind = "transformer"
+bonus = "multilingual"
+
+[[model]]
+name = "gte-multilingual-base"
+hf = "Alibaba-NLP/gte-multilingual-base"
+kind = "transformer"
+bonus = "multilingual"

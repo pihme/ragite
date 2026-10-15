@@ -2,7 +2,7 @@
 
 Status: draft, pre-1.0. Nothing here is implemented yet. Cases carry stable IDs (`TC-n`). Future tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-245.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-246.
 
 ## Conventions
 
@@ -530,3 +530,7 @@ Unless a case says otherwise:
 ## REQ-90
 
 - **TC-245** `DROP TABLE docs_chunks` fails with SQLite's generic logic error. `docs` and `docs_chunks` both still accept `SELECT`.
+
+## REQ-91
+
+- **TC-246** For every sentence in `tests/parity/reference.json`, `ragite_embed_model` with the default Model and role `passage` returns a vector of the same dimension whose cosine with the reference vector is at least 0.99. The file's `model` equals the default technical identifier.

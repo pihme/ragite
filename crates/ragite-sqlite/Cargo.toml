@@ -11,9 +11,13 @@ publish = false
 name = "ragite"
 crate-type = ["cdylib"]
 
+[features]
+default = ["builtin-model"]
+builtin-model = ["ragite-core/builtin-model"]
+
 [dependencies]
 libsqlite3-sys = { version = "0.38.2", features = ["loadable_extension"] }
-ragite-core = { path = "../ragite-core" }
+ragite-core = { path = "../ragite-core", default-features = false }
 
 [build-dependencies]
 cc = "1"

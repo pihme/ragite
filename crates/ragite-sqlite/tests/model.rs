@@ -118,7 +118,7 @@ fn tc_16_tc_184_tc_194_tc_208_tc_58_model_is_stored_and_stable() {
 }
 
 #[test]
-fn tc_56_tc_106_tc_121_tc_127_tc_128_tc_185_rejected_model_on_create() {
+fn tc_56_tc_106_tc_121_tc_126_tc_127_tc_128_tc_185_rejected_model_on_create() {
     let model = model_id();
     let bad = other_revision(&model);
     let out = sql(&format!(
@@ -135,14 +135,16 @@ fn tc_56_tc_106_tc_121_tc_127_tc_128_tc_185_rejected_model_on_create() {
          CREATE VIRTUAL TABLE docs USING ragite(model='{bad}');
          SELECT count(*) AS n FROM sqlite_master WHERE name GLOB 'docs*';
          CREATE VIRTUAL TABLE docs USING ragite(query_prefix='query: ', passage_prefix='passage: ');
+         SELECT count(*) AS n FROM sqlite_master WHERE name GLOB 'docs*';
+         CREATE VIRTUAL TABLE docs USING ragite(revision='bf8b056651a2c21b8d2565580b8569da283cab23');
          SELECT count(*) AS n FROM sqlite_master WHERE name GLOB 'docs*';",
         bare = model.name,
         bad = bad,
     ));
     assert!(!out.status, "{}", out.stderr);
     let rows = parse_json(&out.stdout);
-    assert_eq!(rows.as_array().unwrap().len(), 7, "{}\n{}", out.stderr, out.stdout);
-    for index in 0..7 {
+    assert_eq!(rows.as_array().unwrap().len(), 8, "{}\n{}", out.stderr, out.stdout);
+    for index in 0..8 {
         assert_eq!(cell(&rows, index, "n"), "0", "{}", out.stderr);
     }
     for needle in [
@@ -153,6 +155,7 @@ fn tc_56_tc_106_tc_121_tc_127_tc_128_tc_185_rejected_model_on_create() {
         &format!("model cannot be loaded: {}", model.name),
         &format!("model cannot be loaded: {bad}"),
         "argument is not accepted: query_prefix",
+        "argument is not accepted: revision",
     ] {
         assert!(out.stderr.contains(needle), "missing {needle} in {}", out.stderr);
     }

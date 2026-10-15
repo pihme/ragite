@@ -2,7 +2,17 @@ use std::sync::OnceLock;
 
 use model2vec_rs::model::StaticModel;
 
-use crate::{DIMENSION, MODEL_NAME, TECHNICAL_ID};
+use crate::{MODEL_NAME, TECHNICAL_ID};
+
+#[cfg(feature = "builtin-model")]
+const QUERY_PREFIX: &str = "";
+#[cfg(feature = "builtin-model")]
+const PASSAGE_PREFIX: &str = "";
+
+#[cfg(ragite_provider_model)]
+const QUERY_PREFIX: &str = env!("RAGITE_COMPILED_QUERY_PREFIX");
+#[cfg(ragite_provider_model)]
+const PASSAGE_PREFIX: &str = env!("RAGITE_COMPILED_PASSAGE_PREFIX");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
@@ -28,30 +38,31 @@ pub fn builtin_model() -> Result<&'static BuiltinModel, String> {
 
 impl BuiltinModel {
     fn load() -> Result<Self, String> {
-        #[cfg(not(feature = "builtin-model"))]
+        #[cfg(all(not(feature = "builtin-model"), not(ragite_provider_model)))]
         {
             return Err("this build has no built-in model".to_string());
         }
-        #[cfg(feature = "builtin-model")]
+        #[cfg(any(feature = "builtin-model", ragite_provider_model))]
         {
-            let model = StaticModel::from_bytes(
-                include_bytes!("../../../models/potion-base-8M/tokenizer.json").as_slice(),
-                include_bytes!("../../../models/potion-base-8M/model.safetensors").as_slice(),
-                include_bytes!("../../../models/potion-base-8M/config.json").as_slice(),
-                None,
-            )
-            .map_err(|err| format!("built-in model failed to load: {err}"))?;
+            let (tokenizer, weights, config) = weight_bytes();
+            let model = StaticModel::from_bytes(tokenizer, weights, config, None)
+                .map_err(|err| format!("built-in model failed to load: {err}"))?;
             let probe = model.encode_single("ragite");
-            if probe.len() != DIMENSION {
+            #[cfg(feature = "builtin-model")]
+            if probe.len() != crate::DIMENSION {
                 return Err(format!(
-                    "built-in model dimension is {}, expected {DIMENSION}",
-                    probe.len()
+                    "built-in model dimension is {}, expected {}",
+                    probe.len(),
+                    crate::DIMENSION
                 ));
+            }
+            if probe.is_empty() {
+                return Err("built-in model dimension is 0".to_string());
             }
             Ok(Self {
                 model,
-                query_prefix: String::new(),
-                passage_prefix: String::new(),
+                query_prefix: QUERY_PREFIX.to_string(),
+                passage_prefix: PASSAGE_PREFIX.to_string(),
                 dimension: probe.len(),
             })
         }
@@ -90,10 +101,70 @@ impl BuiltinModel {
     }
 }
 
+#[cfg(feature = "builtin-model")]
+fn weight_bytes() -> (&'static [u8], &'static [u8], &'static [u8]) {
+    (
+        include_bytes!("../../../models/potion-base-8M/tokenizer.json"),
+        include_bytes!("../../../models/potion-base-8M/model.safetensors"),
+        include_bytes!("../../../models/potion-base-8M/config.json"),
+    )
+}
+
+#[cfg(ragite_provider_model)]
+fn weight_bytes() -> (&'static [u8], &'static [u8], &'static [u8]) {
+    (
+        include_bytes!(env!("RAGITE_COMPILED_TOKENIZER")),
+        include_bytes!(env!("RAGITE_COMPILED_WEIGHTS")),
+        include_bytes!(env!("RAGITE_COMPILED_CONFIG")),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[cfg(all(not(feature = "builtin-model"), not(ragite_provider_model)))]
+    #[test]
+    fn tc_53_no_default_features_omits_the_embedded_file() {
+        let err = builtin_model().err().expect("weights were embedded");
+        assert!(err.contains("no built-in model"), "{err}");
+    }
+
+    #[cfg(ragite_provider_model)]
+    #[test]
+    fn tc_54_tc_55_tc_126_provider_prefixes() {
+        let model = builtin_model().expect("provider model");
+        assert_eq!(model.name(), "provider-demo");
+        assert_eq!(model.technical_id(), "provider-demo@rev-supplied");
+        let revision = model.technical_id().split_once('@').unwrap().1;
+        assert_eq!(revision, "rev-supplied");
+        assert_ne!(revision.len(), 40);
+
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../models/potion-base-8M");
+        let on_disk = model2vec_rs::model::StaticModel::from_bytes(
+            std::fs::read(root.join("tokenizer.json")).unwrap(),
+            std::fs::read(root.join("model.safetensors")).unwrap(),
+            std::fs::read(root.join("config.json")).unwrap(),
+            None,
+        )
+        .expect("weights on disk");
+        assert_ne!(
+            model.embed("hello", Role::Query),
+            on_disk.encode_single("hello")
+        );
+        assert_eq!(
+            model.embed("hello", Role::Query),
+            on_disk.encode_single("query:hello")
+        );
+        assert_eq!(
+            model.embed("hello", Role::Passage),
+            on_disk.encode_single("passage:hello")
+        );
+        assert_eq!(model.dimension(), 256);
+    }
+
+    #[cfg(feature = "builtin-model")]
     #[test]
     fn builtin_model_embeds_on_cpu() {
         let model = builtin_model().expect("model");
@@ -103,9 +174,12 @@ mod tests {
             "potion-base-8M@bf8b056651a2c21b8d2565580b8569da283cab23"
         );
         let vector = model.embed("hello", Role::Passage);
-        assert_eq!(vector.len(), DIMENSION);
+        assert_eq!(vector.len(), crate::DIMENSION);
         assert!(vector.iter().all(|v| v.is_finite()));
         assert_eq!(vector, model.embed("hello", Role::Query));
-        assert_eq!(model.embed_blob("hello", Role::Passage).len(), DIMENSION * 4);
+        assert_eq!(
+            model.embed_blob("hello", Role::Passage).len(),
+            crate::DIMENSION * 4
+        );
     }
 }

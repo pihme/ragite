@@ -43,6 +43,84 @@ fn tc_4_extension_uses_libsqlite3_sys() {
 }
 
 #[test]
+fn tc_10_tc_64_tc_65_notices_and_dependency_licenses() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let notices = std::fs::read_to_string(root.join("THIRD_PARTY_NOTICES.md")).unwrap();
+    assert!(notices.contains("potion-base-8M"));
+    assert!(notices.contains("license: mit"));
+    assert!(notices.contains("bf8b056651a2c21b8d2565580b8569da283cab23"));
+    assert!(notices.contains("model2vec-rs"));
+    assert!(root.join("THIRD_PARTY_NOTICES.md").is_file());
+    assert!(!root.join("models/potion-base-8M/LICENSE").exists());
+    let readme = std::fs::read_to_string(root.join("README.md")).unwrap();
+    assert!(readme.contains("THIRD_PARTY_NOTICES.md"));
+    for extra in [".github/release.json", "package.json", "Dockerfile"] {
+        let path = root.join(extra);
+        if path.is_file() {
+            let text = std::fs::read_to_string(&path).unwrap();
+            assert!(
+                text.contains("THIRD_PARTY_NOTICES.md"),
+                "{extra} does not ship THIRD_PARTY_NOTICES.md"
+            );
+        }
+    }
+
+    let output = Command::new("cargo")
+        .args([
+            "metadata",
+            "--format-version",
+            "1",
+            "--offline",
+            "--manifest-path",
+        ])
+        .arg(root.join("Cargo.toml"))
+        .output()
+        .expect("cargo metadata");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let meta: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    for package in meta["packages"].as_array().unwrap() {
+        let name = package["name"].as_str().unwrap();
+        if name == "ragite-core" || name == "ragite-sqlite" {
+            continue;
+        }
+        match package["license"].as_str() {
+            None => {
+                assert_eq!(name, "model2vec-rs", "{name} has no license metadata");
+                assert!(notices.contains("LICENSE file"));
+            }
+            Some(license) => assert!(
+                permissive_license(license),
+                "{name} license {license} is not compatible with MIT OR Apache-2.0"
+            ),
+        }
+    }
+}
+
+fn permissive_license(license: &str) -> bool {
+    matches!(
+        license,
+        "MIT"
+            | "MIT OR Apache-2.0"
+            | "MIT/Apache-2.0"
+            | "Apache-2.0"
+            | "Apache-2.0 / MIT"
+            | "Apache-2.0/MIT"
+            | "Apache-2.0 OR MIT"
+            | "Apache-2.0 OR BSL-1.0"
+            | "Apache-2.0 OR MIT OR Zlib"
+            | "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
+            | "(MIT OR Apache-2.0) AND Unicode-3.0"
+            | "MIT OR Apache-2.0 OR LGPL-2.1-or-later"
+            | "BSD-2-Clause OR Apache-2.0 OR MIT"
+            | "Unlicense OR MIT"
+    )
+}
+
+#[test]
 fn tc_9_license_is_dual() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let workspace = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();

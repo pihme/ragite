@@ -21,10 +21,29 @@ pub const CHUNK_LIMIT: usize = 512;
 /// Chunks taken from each ranking before fusion.
 pub const FUSION_DEPTH: usize = 50;
 
+#[cfg(feature = "builtin-model")]
 pub const MODEL_NAME: &str = "potion-base-8M";
 
+#[cfg(feature = "builtin-model")]
 pub const TECHNICAL_ID: &str = "potion-base-8M@bf8b056651a2c21b8d2565580b8569da283cab23";
 
+#[cfg(ragite_provider_model)]
+pub const MODEL_NAME: &str = env!("RAGITE_COMPILED_NAME");
+
+#[cfg(ragite_provider_model)]
+pub const TECHNICAL_ID: &str = concat!(
+    env!("RAGITE_COMPILED_NAME"),
+    "@",
+    env!("RAGITE_COMPILED_REVISION")
+);
+
+#[cfg(all(not(feature = "builtin-model"), not(ragite_provider_model)))]
+pub const MODEL_NAME: &str = "";
+
+#[cfg(all(not(feature = "builtin-model"), not(ragite_provider_model)))]
+pub const TECHNICAL_ID: &str = "";
+
+/// Dimension of the built-in potion-base-8M model. A provider model uses the dimension of its own weights.
 pub const DIMENSION: usize = 256;
 
 /// SHA-256 of the UTF-8 bytes of `text`, as 64 lowercase hex characters.

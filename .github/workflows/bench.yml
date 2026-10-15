@@ -1,0 +1,67 @@
+name: Model benchmark
+
+# Quality run for one candidate Model (REQ-89). Manual only; never on push.
+# CPU costs are measured on the fixed benchmark machine, not here.
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Candidate name from bench/candidates.toml"
+        required: true
+        default: potion-base-8M
+      datasets:
+        description: "Space-separated MTEB datasets"
+        required: true
+        default: "mteb/scifact mteb/nfcorpus mteb/fiqa mteb/germanquad-retrieval"
+      max_docs:
+        description: "Corpus subsample for a dry run (empty = full)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install harness
+        run: pip install -r bench/requirements.txt
+      - name: Build extension with the candidate
+        id: build
+        run: |
+          read -r hf kind qp pp < <(python3 - "${{ inputs.model }}" <<'PY'
+          import sys, tomllib
+          m = next(m for m in tomllib.load(open("bench/candidates.toml","rb"))["model"] if m["name"] == sys.argv[1])
+          print(m["hf"], m["kind"], repr(m.get("query_prefix","")), repr(m.get("passage_prefix","")))
+          PY
+          )
+          echo "hf=$hf" >> "$GITHUB_OUTPUT"; echo "kind=$kind" >> "$GITHUB_OUTPUT"; echo "pp=$(eval echo $pp)" >> "$GITHUB_OUTPUT"
+          ext=$(bench/build_model.sh "$hf" "${{ inputs.model }}" "$(eval echo $qp)" "$(eval echo $pp)")
+          echo "ext=$ext" >> "$GITHUB_OUTPUT"
+      - name: Parity check against the reference
+        run: python3 bench/parity/check_parity.py --extension "${{ steps.build.outputs.ext }}" --hf "${{ steps.build.outputs.hf }}" --kind "${{ steps.build.outputs.kind }}" --passage-prefix "${{ steps.build.outputs.pp }}"
+      - name: Quality
+        run: |
+          for ds in ${{ inputs.datasets }}; do
+            python3 bench/run_quality.py --extension "${{ steps.build.outputs.ext }}" --dataset "$ds" \
+              ${{ inputs.max_docs && format('--max-docs {0}', inputs.max_docs) || '' }} \
+              --out "bench/results/quality/${{ inputs.model }}--${ds//\//_}.json"
+          done
+          if [ -s bench/questions/own.jsonl ]; then
+            python3 bench/run_quality.py --extension "${{ steps.build.outputs.ext }}" --own bench/questions/own.jsonl \
+              --out "bench/results/quality/${{ inputs.model }}--own.json"
+          fi
+      - uses: actions/upload-artifact@v5
+        with:
+          name: bench-${{ inputs.model }}
+          path: bench/results/

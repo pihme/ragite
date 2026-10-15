@@ -19,7 +19,9 @@ fn tc_95_script_and_style_only_is_stored_without_chunks() {
          SELECT count(*) AS n FROM docs;
          SELECT count(*) AS n FROM docs_chunks;
          SELECT count(*) AS n FROM docs_vec;
-         SELECT count(*) AS n FROM docs_fts;");
+         SELECT count(*) AS n FROM docs_fts;
+         SELECT count(*) AS n FROM docs WHERE docs MATCH 'secret';
+         SELECT count(*) AS n FROM docs_chunks WHERE docs_chunks MATCH 'secret';");
     assert_eq!(
         cell(&rows, 0, "text"),
         "<script>secret</script><style>x</style>"
@@ -29,6 +31,8 @@ fn tc_95_script_and_style_only_is_stored_without_chunks() {
     assert_eq!(cell(&rows, 2, "n"), "0");
     assert_eq!(cell(&rows, 3, "n"), "0");
     assert_eq!(cell(&rows, 4, "n"), "0");
+    assert_eq!(cell(&rows, 5, "n"), "0");
+    assert_eq!(cell(&rows, 6, "n"), "0");
 }
 
 #[test]

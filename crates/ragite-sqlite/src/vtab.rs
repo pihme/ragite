@@ -592,7 +592,10 @@ unsafe fn best_index(info: *mut sqlite3_index_info) -> c_int {
     }
     if let Some(index) = rowid_at {
         usage[index].argvIndex = 1;
-        usage[index].omit = 1;
+        // sqlite3_value_int64 truncates a non-integral value. Leaving the
+        // constraint in place lets SQLite reject 2.5 and '2.5' the same way
+        // a rowid table does, while 2.0 and '2' still match (REQ-96).
+        usage[index].omit = 0;
         info.idxNum = IDX_ROWID;
         info.idxStr = c"rowid".as_ptr().cast_mut();
         info.needToFreeIdxStr = 0;

@@ -322,6 +322,38 @@ fn tc_251_to_254_rowid_equality_is_a_unique_lookup() {
     assert_eq!(cell(&hit, 1, "source"), "b");
     assert!(hit.as_array().unwrap()[1]["score"].is_null());
 
+    let fractional = ok(&format!(
+        "{setup}
+         SELECT rowid AS id FROM docs_chunks WHERE rowid = 2.5;
+         SELECT rowid AS id FROM docs WHERE rowid = 2.5;
+         SELECT rowid AS id FROM docs_chunks WHERE rowid = '2.5';
+         SELECT rowid AS id FROM docs WHERE rowid = '2.5';"
+    ));
+    assert!(
+        fractional.as_array().unwrap().is_empty(),
+        "non-integral rowid returned {fractional}"
+    );
+    let fractional_plan = plan_text(&format!(
+        "{setup}
+         EXPLAIN QUERY PLAN SELECT chunk FROM docs_chunks WHERE rowid = 2.5;"
+    ));
+    assert!(
+        fractional_plan.contains("INDEX 2:rowid"),
+        "non-integral plan: {fractional_plan}"
+    );
+
+    let integral = ok(&format!(
+        "{setup}
+         SELECT rowid AS id FROM docs_chunks WHERE rowid = 2.0;
+         SELECT rowid AS id FROM docs WHERE rowid = 2.0;
+         SELECT rowid AS id FROM docs_chunks WHERE rowid = '2';
+         SELECT rowid AS id FROM docs WHERE rowid = '2';"
+    ));
+    assert_eq!(integral.as_array().unwrap().len(), 4);
+    for index in 0..4 {
+        assert_eq!(cell(&integral, index, "id"), "2");
+    }
+
     // An empty MATCH returns no rows (REQ-43). A rowid-only plan would still
     // return the chunk, so this locks the search plan when both are usable.
     let matched = ok(&format!(

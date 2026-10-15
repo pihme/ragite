@@ -6,3 +6,10 @@ members = ["crates/ragite-core", "crates/ragite-sqlite"]
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.88"
+
+# Release artifacts (the attached libragite.so). sqlite3_ragite_init is
+# #[no_mangle] pub extern "C", so strip keeps it in the dynamic symbol table.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true

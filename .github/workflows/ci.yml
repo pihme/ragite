@@ -73,9 +73,16 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y sqlite3 libsqlite3-0
 
       - name: Measure coverage
+        # The integration tests load target/debug/libragite.so through sqlite3,
+        # so build the instrumented extension first, then run the tests.
         run: |
+          source <(cargo llvm-cov show-env --export-prefix)
+          cargo llvm-cov clean --workspace
           env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
-            cargo llvm-cov --workspace --lcov --output-path lcov.info
+            cargo build -p ragite-sqlite
+          env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
+            cargo test --workspace
+          cargo llvm-cov report --lcov --output-path lcov.info
           {
             echo '## Rust coverage'
             echo

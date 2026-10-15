@@ -7,7 +7,7 @@ mod common;
 use common::{cell, extension_path, ok, sql};
 
 const CONFIG_MARKER: &[u8] = b"baai/bge-base-en-v1.5";
-const BUILTIN_ID: &[u8] = b"potion-base-8M@bf8b056651a2c21b8d2565580b8569da283cab23";
+const BUILTIN_ID: &[u8] = b"potion-retrieval-32M@6fc8051fab2a1e0ee76689cf08c853792ac285e7";
 
 #[test]
 #[ignore = "needs the provider-model extension from make test"]

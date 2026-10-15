@@ -104,9 +104,9 @@ impl BuiltinModel {
 #[cfg(feature = "builtin-model")]
 fn weight_bytes() -> (&'static [u8], &'static [u8], &'static [u8]) {
     (
-        include_bytes!("../../../models/potion-base-8M/tokenizer.json"),
-        include_bytes!("../../../models/potion-base-8M/model.safetensors"),
-        include_bytes!("../../../models/potion-base-8M/config.json"),
+        include_bytes!("../../../models/potion-retrieval-32M/tokenizer.json"),
+        linked_weights(),
+        include_bytes!("../../../models/potion-retrieval-32M/config.json"),
     )
 }
 
@@ -114,12 +114,12 @@ fn weight_bytes() -> (&'static [u8], &'static [u8], &'static [u8]) {
 fn weight_bytes() -> (&'static [u8], &'static [u8], &'static [u8]) {
     (
         include_bytes!(env!("RAGITE_COMPILED_TOKENIZER")),
-        provider_weights(),
+        linked_weights(),
         include_bytes!(env!("RAGITE_COMPILED_CONFIG")),
     )
 }
 
-// The provider weights are linked with the assembler's `.incbin` instead of
+// The weights (built-in and provider) are linked with the assembler's `.incbin` instead of
 // `include_bytes!`. rustc holds an included file in memory several times over,
 // which gets a 512 MB model (potion-multilingual-128M) OOM-killed on a 16 GB
 // machine; the assembler streams the file into the object instead.
@@ -135,8 +135,25 @@ std::arch::global_asm!(
     ".popsection",
 );
 
-#[cfg(ragite_provider_model)]
-fn provider_weights() -> &'static [u8] {
+// The built-in potion-retrieval-32M weights are 129 MB; same reason as above.
+#[cfg(feature = "builtin-model")]
+std::arch::global_asm!(
+    ".pushsection .rodata.ragite_weights,\"a\"",
+    ".balign 16",
+    ".globl ragite_weights_start",
+    "ragite_weights_start:",
+    concat!(
+        ".incbin \"",
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../models/potion-retrieval-32M/model.safetensors\""
+    ),
+    ".globl ragite_weights_end",
+    "ragite_weights_end:",
+    ".popsection",
+);
+
+#[cfg(any(feature = "builtin-model", ragite_provider_model))]
+fn linked_weights() -> &'static [u8] {
     unsafe extern "C" {
         static ragite_weights_start: u8;
         static ragite_weights_end: u8;
@@ -198,10 +215,10 @@ mod tests {
     #[test]
     fn builtin_model_embeds_on_cpu() {
         let model = builtin_model().expect("model");
-        assert_eq!(model.name(), "potion-base-8M");
+        assert_eq!(model.name(), "potion-retrieval-32M");
         assert_eq!(
             model.technical_id(),
-            "potion-base-8M@bf8b056651a2c21b8d2565580b8569da283cab23"
+            "potion-retrieval-32M@6fc8051fab2a1e0ee76689cf08c853792ac285e7"
         );
         let vector = model.embed("hello", Role::Passage);
         assert_eq!(vector.len(), crate::DIMENSION);

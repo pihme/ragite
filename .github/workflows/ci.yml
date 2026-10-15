@@ -24,12 +24,13 @@ jobs:
 
       - name: Require the smudged model weights
         run: |
-          file=models/potion-base-8M/model.safetensors
-          test -s "$file"
-          if head -c 40 "$file" | grep -q 'git-lfs'; then
-            echo "model weights are still a Git LFS pointer"
-            exit 1
-          fi
+          for file in models/potion-retrieval-32M/model.safetensors models/potion-base-8M/model.safetensors; do
+            test -s "$file"
+            if head -c 40 "$file" | grep -q 'git-lfs'; then
+              echo "model weights are still a Git LFS pointer: $file"
+              exit 1
+            fi
+          done
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -142,12 +143,13 @@ jobs:
 
       - name: Require the smudged model weights
         run: |
-          file=models/potion-base-8M/model.safetensors
-          test -s "$file"
-          if head -c 40 "$file" | grep -q 'git-lfs'; then
-            echo "model weights are still a Git LFS pointer"
-            exit 1
-          fi
+          for file in models/potion-retrieval-32M/model.safetensors models/potion-base-8M/model.safetensors; do
+            test -s "$file"
+            if head -c 40 "$file" | grep -q 'git-lfs'; then
+              echo "model weights are still a Git LFS pointer: $file"
+              exit 1
+            fi
+          done
 
       - uses: dtolnay/rust-toolchain@stable
 

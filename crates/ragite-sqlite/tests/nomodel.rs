@@ -16,10 +16,10 @@ fn tc_53_no_default_features_omits_the_embedded_file() {
         !bytes
             .windows(CONFIG_MARKER.len())
             .any(|window| window == CONFIG_MARKER),
-        "config.json from potion-base-8M is still embedded"
+        "config.json from potion-retrieval-32M is still embedded"
     );
     let out = sql("SELECT ragite_embed_model(
-            'potion-base-8M@bf8b056651a2c21b8d2565580b8569da283cab23',
+            'potion-retrieval-32M@6fc8051fab2a1e0ee76689cf08c853792ac285e7',
             'hello',
             'passage'
          );");

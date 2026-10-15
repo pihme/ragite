@@ -46,12 +46,12 @@ fn tc_4_extension_uses_libsqlite3_sys() {
 fn tc_10_tc_64_tc_65_notices_and_dependency_licenses() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let notices = std::fs::read_to_string(root.join("THIRD_PARTY_NOTICES.md")).unwrap();
-    assert!(notices.contains("potion-base-8M"));
+    assert!(notices.contains("potion-retrieval-32M"));
     assert!(notices.contains("license: mit"));
-    assert!(notices.contains("bf8b056651a2c21b8d2565580b8569da283cab23"));
+    assert!(notices.contains("6fc8051fab2a1e0ee76689cf08c853792ac285e7"));
     assert!(notices.contains("model2vec-rs"));
     assert!(root.join("THIRD_PARTY_NOTICES.md").is_file());
-    assert!(!root.join("models/potion-base-8M/LICENSE").exists());
+    assert!(!root.join("models/potion-retrieval-32M/LICENSE").exists());
     let readme = std::fs::read_to_string(root.join("README.md")).unwrap();
     assert!(readme.contains("THIRD_PARTY_NOTICES.md"));
     for extra in [".github/release.json", "package.json", "Dockerfile"] {
@@ -314,7 +314,7 @@ fn tc_66_tc_192_fts_and_vec_definitions() {
         .to_ascii_lowercase();
     assert!(vec_sql.contains("vec0"), "{vec_sql}");
     assert!(vec_sql.contains("cosine"), "{vec_sql}");
-    assert!(vec_sql.contains("float[256]"), "{vec_sql}");
+    assert!(vec_sql.contains("float[512]"), "{vec_sql}");
 }
 
 #[test]

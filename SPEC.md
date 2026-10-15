@@ -211,7 +211,7 @@ Known licenses (from the design research, to be verified against real metadata w
 
 The maintainer chose the version 1 constants. They are fixed for every caller of this build.
 
-- **Model.** potion-base-8M, a static Model2Vec model, English, MIT, dimension 256. Human-readable name `potion-base-8M`. Technical identifier `potion-base-8M@bf8b056651a2c21b8d2565580b8569da283cab23` (the Hugging Face commit of the weights). Query prefix and passage prefix are empty. The bundled files are `config.json`, `tokenizer.json`, and `model.safetensors` from that revision. The ONNX file is not bundled.
+- **Model.** potion-retrieval-32M, a static Model2Vec model trained for retrieval, English, MIT, dimension 512. Human-readable name `potion-retrieval-32M`. Technical identifier `potion-retrieval-32M@6fc8051fab2a1e0ee76689cf08c853792ac285e7` (the Hugging Face commit of the weights). Query prefix and passage prefix are empty. The bundled files are `config.json`, `tokenizer.json`, and `model.safetensors` from that revision. The ONNX file is not bundled.
 - **Chunk length.** 512 Unicode scalars.
 - **Overlap.** 64 Unicode scalars.
 - **Fusion depth.** 50 Chunks from each ranking.
@@ -232,7 +232,7 @@ The table is the set that was considered. It is not a menu. Parameters, dimensio
 | paraphrase-multilingual-MiniLM-L12-v2 (bonus) | 118 M | 384 | Apache-2.0 | Transformer, multilingual |
 | gte-multilingual-base (bonus) | 305 M | 768 | Apache-2.0 | Transformer, multilingual, largest candidate |
 
-potion-base-8M is the built-in Model because it is the smallest English MIT candidate and it runs as static vectors on CPU.
+potion-retrieval-32M is the built-in Model. In the Model2Vec benchmark (bench/RESULTS.md) it had the best quality of the static candidates (mean nDCG@10 0.376 hybrid on SciFact, NFCorpus, FiQA, against 0.331 for potion-base-8M), it is English and MIT, and it runs as static vectors on CPU. The cost is size: the weights are ~129 MB, so the extension is ~131 MB instead of ~36 MB, and vectors take 2 KB per Chunk instead of 1 KB.
 
 ## 9. References
 

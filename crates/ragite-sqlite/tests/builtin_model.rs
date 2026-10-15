@@ -1,4 +1,4 @@
-//! Default build: the extension embeds potion-base-8M.
+//! Default build: the extension embeds potion-retrieval-32M.
 
 #[allow(dead_code)]
 mod common;

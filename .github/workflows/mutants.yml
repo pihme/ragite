@@ -1,0 +1,49 @@
+name: Mutation
+
+# Manual cargo-mutants run for ragite-core. Not on push or pull request.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutants:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - name: Require the smudged model weights
+        run: |
+          file=models/potion-base-8M/model.safetensors
+          test -s "$file"
+          if head -c 40 "$file" | grep -q 'git-lfs'; then
+            echo "model weights are still a Git LFS pointer"
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-mutants
+        run: cargo install cargo-mutants --locked --version 27.1.0
+
+      - name: Mutation test ragite-core
+        run: cargo mutants -p ragite-core --no-shuffle
+
+      - name: Upload mutant outcomes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutants-${{ github.run_id }}
+          if-no-files-found: ignore
+          path: mutants.out

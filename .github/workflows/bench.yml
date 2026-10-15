@@ -10,7 +10,7 @@ on:
         required: true
         default: potion-base-8M
       datasets:
-        description: "Space-separated MTEB datasets (add mteb/germanquad-retrieval for the German column)"
+        description: "Space-separated MTEB datasets"
         required: true
         default: "mteb/scifact mteb/nfcorpus mteb/fiqa"
       max_docs:

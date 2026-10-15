@@ -6,7 +6,10 @@ mod common;
 
 use common::{cell, extension_path, ok, sql};
 
-const CONFIG_MARKER: &[u8] = b"baai/bge-base-en-v1.5";
+// The provider fixture is potion-base-8M (`hidden_dim` 256); the built-in
+// potion-retrieval-32M config has 512.
+const CONFIG_MARKER: &[u8] = b"\"hidden_dim\": 256";
+const BUILTIN_CONFIG_MARKER: &[u8] = b"\"hidden_dim\": 512";
 const BUILTIN_ID: &[u8] = b"potion-retrieval-32M@6fc8051fab2a1e0ee76689cf08c853792ac285e7";
 
 #[test]
@@ -18,6 +21,12 @@ fn tc_54_tc_55_tc_126_provider_catalog_and_prefixes() {
             .windows(CONFIG_MARKER.len())
             .any(|window| window == CONFIG_MARKER),
         "provider weights were not compiled in"
+    );
+    assert!(
+        !bytes
+            .windows(BUILTIN_CONFIG_MARKER.len())
+            .any(|window| window == BUILTIN_CONFIG_MARKER),
+        "built-in config.json is still in the extension"
     );
     assert!(
         !bytes

@@ -1,3 +1,4 @@
 *.safetensors filter=lfs diff=lfs merge=lfs -text
 third_party/** linguist-vendored
 models/** linguist-vendored
+models/**/tokenizer.json filter=lfs diff=lfs merge=lfs -text

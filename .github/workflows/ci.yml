@@ -22,12 +22,12 @@ jobs:
         with:
           lfs: true
 
-      - name: Require the smudged model weights
+      - name: Require the smudged model files
         run: |
-          for file in models/potion-retrieval-32M/model.safetensors models/potion-base-8M/model.safetensors; do
+          for file in models/*/model.safetensors models/*/tokenizer.json; do
             test -s "$file"
             if head -c 40 "$file" | grep -q 'git-lfs'; then
-              echo "model weights are still a Git LFS pointer: $file"
+              echo "model file is still a Git LFS pointer: $file (check out with lfs: true / git lfs pull)"
               exit 1
             fi
           done
@@ -141,12 +141,12 @@ jobs:
           lfs: true
           persist-credentials: false
 
-      - name: Require the smudged model weights
+      - name: Require the smudged model files
         run: |
-          for file in models/potion-retrieval-32M/model.safetensors models/potion-base-8M/model.safetensors; do
+          for file in models/*/model.safetensors models/*/tokenizer.json; do
             test -s "$file"
             if head -c 40 "$file" | grep -q 'git-lfs'; then
-              echo "model weights are still a Git LFS pointer: $file"
+              echo "model file is still a Git LFS pointer: $file (check out with lfs: true / git lfs pull)"
               exit 1
             fi
           done

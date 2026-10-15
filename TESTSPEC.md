@@ -2,7 +2,7 @@
 
 Status: draft, pre-1.0. Nothing here is implemented yet. Cases carry stable IDs (`TC-n`). Future tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-246.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-249.
 
 ## Conventions
 
@@ -513,6 +513,7 @@ Unless a case says otherwise:
 
 - **TC-235** `<p>&amp; &#65; &#x42; &unknown;</p>` has chunk text `& A B &unknown;`.
 - **TC-236** `<!-- &amp; -->` has chunk text ` &amp; `. `<p>&lt;!-- not --&gt;</p>` is a paragraph whose visible text is `<!-- not -->`, and it is not a comment Chunk.
+- **TC-248** `<p>&#128; &#150; &#0; &#xD800; &#1114112;</p>` has chunk text `€ – U+FFFD U+FFFD U+FFFD`. `&#128;` is U+20AC, `&#150;` is U+2013, and `&#0;`, the surrogate `&#xD800;`, and `&#1114112;` are each U+FFFD. `<!-- &#128; -->` keeps the reference as written.
 
 ## REQ-87
 
@@ -534,3 +535,11 @@ Unless a case says otherwise:
 ## REQ-91
 
 - **TC-246** For every sentence in `tests/parity/reference.json`, `ragite_embed_model` with the default Model and role `passage` returns a vector of the same dimension whose cosine with the reference vector is at least 0.99. The file's `model` equals the default technical identifier.
+
+## REQ-93
+
+- **TC-247** `INSERT INTO docs(text, source) VALUES (3.7, -2.5)` stores text `3.7` and source `-2.5`. The plain-text Chunk is `3.7`. An integer `4` is stored as `4`.
+
+## REQ-94
+
+- **TC-249** A DoclingDocument whose text items are named `a/b` and `a~b` is reached by `$ref` values `#/texts/a~1b` and `#/texts/a~0b`. The Chunks are `slash` and `tilde`, in that order. `meta_json` `element` is the reference that was walked.

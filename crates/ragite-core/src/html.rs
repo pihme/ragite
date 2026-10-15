@@ -432,26 +432,57 @@ fn character_reference(chars: &[char], start: usize, end: usize) -> Option<(Stri
         {
             index += 1;
         }
-        if index == digits || index >= end || chars[index] != ';' {
+        if index == digits {
             return None;
+        }
+        let mut next = index;
+        if index < end && chars[index] == ';' {
+            next = index + 1;
         }
         let number: String = chars[digits..index].iter().collect();
         let cp = if hex {
-            u32::from_str_radix(&number, 16).ok()?
+            u32::from_str_radix(&number, 16).unwrap_or(0x11_0000)
         } else {
-            number.parse().ok()?
+            number.parse().unwrap_or(0x11_0000)
         };
-        return Some((from_numeric(cp).to_string(), index + 1));
+        return Some((from_numeric(cp).to_string(), next));
     }
     let name_at = index;
+    let mut legacy = None;
     while index < end && chars[index].is_ascii_alphanumeric() {
         index += 1;
+        let name: String = chars[name_at..index].iter().collect();
+        if is_legacy_name(&name) {
+            if let Some(value) = named_entity(&name) {
+                legacy = Some((value.to_string(), index));
+            }
+        }
     }
-    if index == name_at || index >= end || chars[index] != ';' {
-        return None;
+    if index < end && chars[index] == ';' {
+        let name: String = chars[name_at..index].iter().collect();
+        if let Some(value) = named_entity(&name) {
+            return Some((value.to_string(), index + 1));
+        }
     }
-    let name: String = chars[name_at..index].iter().collect();
-    Some((named_entity(&name)?.to_string(), index + 1))
+    legacy
+}
+
+/// Names the HTML table accepts without a trailing semicolon.
+fn is_legacy_name(name: &str) -> bool {
+    const LEGACY: &[&str] = &[
+        "AElig", "AMP", "Aacute", "Acirc", "Agrave", "Aring", "Atilde", "Auml", "COPY", "Ccedil",
+        "ETH", "Eacute", "Ecirc", "Egrave", "Euml", "GT", "Iacute", "Icirc", "Igrave", "Iuml", "LT",
+        "Ntilde", "Oacute", "Ocirc", "Ograve", "Oslash", "Otilde", "Ouml", "QUOT", "REG", "THORN",
+        "Uacute", "Ucirc", "Ugrave", "Uuml", "Yacute", "aacute", "acirc", "acute", "aelig", "agrave",
+        "amp", "aring", "atilde", "auml", "brvbar", "ccedil", "cedil", "cent", "copy", "curren",
+        "deg", "divide", "eacute", "ecirc", "egrave", "eth", "euml", "frac12", "frac14", "frac34",
+        "gt", "iacute", "icirc", "iexcl", "igrave", "iquest", "iuml", "laquo", "lt", "macr",
+        "micro", "middot", "nbsp", "not", "ntilde", "oacute", "ocirc", "ograve", "ordf", "ordm",
+        "oslash", "otilde", "ouml", "para", "plusmn", "pound", "quot", "raquo", "reg", "sect",
+        "shy", "sup1", "sup2", "sup3", "szlig", "thorn", "times", "uacute", "ucirc", "ugrave",
+        "uml", "uuml", "yacute", "yen", "yuml",
+    ];
+    LEGACY.binary_search(&name).is_ok()
 }
 
 /// HTML numeric references, including the C1 Windows-1252 remap.
@@ -932,6 +963,11 @@ mod tests {
             vec!["& A B &unknown;"]
         );
         assert_eq!(texts(&chunk_html("<!-- &amp; -->")), vec![" &amp; "]);
+        assert_eq!(texts(&chunk_html("<p>&#65 &#x42</p>")), vec!["A B"]);
+        assert_eq!(texts(&chunk_html("<p>&amp x</p>")), vec!["& x"]);
+        assert_eq!(texts(&chunk_html("<p>&notit;</p>")), vec!["\u{ac}it;"]);
+        assert_eq!(texts(&chunk_html("<p>&notin;</p>")), vec!["\u{2209}"]);
+        assert_eq!(texts(&chunk_html("<!-- &#65 &amp -->")), vec![" &#65 &amp "]);
         let disguised = chunk_html("<p>&lt;!-- not --&gt;</p>");
         assert_eq!(texts(&disguised), vec!["<!-- not -->"]);
         assert_eq!(disguised.len(), 1);

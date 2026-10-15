@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A push to main may later cut a release. Do not cancel that run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - name: Require the smudged model weights
+        run: |
+          file=models/potion-base-8M/model.safetensors
+          test -s "$file"
+          if head -c 40 "$file" | grep -q 'git-lfs'; then
+            echo "model weights are still a Git LFS pointer"
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: tests/languages/go/go.mod
+          cache: false
+
+      - name: Install SQLite
+        run: sudo apt-get update && sudo apt-get install -y sqlite3 libsqlite3-0
+
+      - name: Test
+        run: make test

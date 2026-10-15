@@ -28,6 +28,8 @@ Out of scope: parsing source formats (PDF, Office, ...), answer generation and e
 
 ## Status
 
+See [ROADMAP.md](ROADMAP.md) for what versions 1.0 and 2 will deliver.
+
 Pre-1.0, specification only. There is no code, no release and no package yet. The design lives in [SPEC.md](SPEC.md); the default embedding model is still open and will be chosen by benchmark.
 
 ## Contributing

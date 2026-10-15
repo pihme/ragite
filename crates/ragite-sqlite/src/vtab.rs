@@ -7,10 +7,10 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
 use libsqlite3_sys::{
-    sqlite3, sqlite3_declare_vtab, sqlite3_free, sqlite3_module, sqlite3_value,
+    sqlite3, sqlite3_declare_vtab, sqlite3_free, sqlite3_index_info, sqlite3_module, sqlite3_value,
     sqlite3_value_bytes, sqlite3_value_int64, sqlite3_value_text, sqlite3_value_type,
-    sqlite3_vtab, sqlite3_vtab_cursor, SQLITE_ERROR, SQLITE_FLOAT, SQLITE_INTEGER, SQLITE_NULL,
-    SQLITE_OK, SQLITE_TEXT, SQLITE_TRANSIENT,
+    sqlite3_vtab, sqlite3_vtab_cursor, SQLITE_ERROR, SQLITE_FLOAT, SQLITE_INDEX_CONSTRAINT_MATCH,
+    SQLITE_INTEGER, SQLITE_NULL, SQLITE_OK, SQLITE_TEXT, SQLITE_TRANSIENT,
 };
 use ragite_core::{
     BuiltinModel, Chunk, Role, TECHNICAL_ID, builtin_model, chunk_docling, chunk_html, chunk_markdown,
@@ -21,8 +21,8 @@ use ragite_core::{
 use crate::sql::{self, Stmt};
 
 const DOC_SCHEMA: &str =
-    "CREATE TABLE x(doc_id INTEGER, text TEXT, source TEXT, format TEXT, hash TEXT, score REAL)";
-const CHUNK_SCHEMA: &str = "CREATE TABLE x(chunk TEXT, doc_id INTEGER, source TEXT, start INTEGER, end INTEGER, heading_path TEXT, meta_json TEXT, score REAL)";
+    "CREATE TABLE x(doc_id INTEGER, text TEXT, source TEXT, format TEXT, hash TEXT, score REAL";
+const CHUNK_SCHEMA: &str = "CREATE TABLE x(chunk TEXT, doc_id INTEGER, source TEXT, start INTEGER, end INTEGER, heading_path TEXT, meta_json TEXT, score REAL";
 
 const COL_DOC_ID: c_int = 0;
 const COL_TEXT: c_int = 1;
@@ -30,6 +30,8 @@ const COL_SOURCE: c_int = 2;
 const COL_FORMAT: c_int = 3;
 const COL_HASH: c_int = 4;
 const COL_SCORE: c_int = 5;
+/// Hidden column whose name is the table name, so `name MATCH` resolves.
+const COL_DOC_MATCH: c_int = 6;
 
 const COL_CHUNK: c_int = 0;
 const COL_C_DOC: c_int = 1;
@@ -39,6 +41,14 @@ const COL_END: c_int = 4;
 const COL_PATH: c_int = 5;
 const COL_META: c_int = 6;
 const COL_C_SCORE: c_int = 7;
+const COL_CHUNK_MATCH: c_int = 8;
+
+/// `<sql_name>` is a hidden column. SQLite resolves `sql_name MATCH expr` to it.
+fn declared_schema(chunks: bool, sql_name: &str) -> String {
+    let hidden = sql::quote_ident(sql_name);
+    let columns = if chunks { CHUNK_SCHEMA } else { DOC_SCHEMA };
+    format!("{columns}, {hidden} HIDDEN)")
+}
 
 static ALLOW_DROP: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
@@ -72,6 +82,9 @@ struct Vtab {
     schema: String,
     doc_name: String,
     chunks: bool,
+    /// Connect-time result of `read_model_ok`. Writers re-read the shadow row,
+    /// because `<name>_model` can change without a reconnect.
+    #[allow(dead_code)]
     model_ok: bool,
 }
 
@@ -301,7 +314,7 @@ unsafe fn connect(
     } else {
         read_model_ok(db, &args.schema, &args.table)?
     };
-    let schema_sql = if args.chunks { CHUNK_SCHEMA } else { DOC_SCHEMA };
+    let schema_sql = declared_schema(args.chunks, &args.sql_name);
     let c_schema = std::ffi::CString::new(schema_sql).unwrap();
     let rc = unsafe { sqlite3_declare_vtab(db, c_schema.as_ptr()) };
     if rc != SQLITE_OK {
@@ -321,7 +334,11 @@ unsafe fn connect(
     Ok(())
 }
 
-fn read_model_ok(db: *mut sqlite3, schema: &str, table: &str) -> Result<bool, String> {
+pub(crate) fn stored_technical_id(
+    db: *mut sqlite3,
+    schema: &str,
+    table: &str,
+) -> Result<String, String> {
     let sql = format!(
         "SELECT technical_id FROM {}",
         sql::qualified(schema, &format!("{table}_model"))
@@ -330,13 +347,32 @@ fn read_model_ok(db: *mut sqlite3, schema: &str, table: &str) -> Result<bool, St
     if !stmt.step()? {
         return Err(format!("stored model is missing: {table}"));
     }
-    let stored = stmt.column_text(0).unwrap_or_default();
+    Ok(stmt.column_text(0).unwrap_or_default())
+}
+
+fn read_model_ok(db: *mut sqlite3, schema: &str, table: &str) -> Result<bool, String> {
+    let stored = stored_technical_id(db, schema, table)?;
     Ok(stored == TECHNICAL_ID && builtin_model().is_ok())
+}
+
+pub(crate) fn require_stored_model(
+    db: *mut sqlite3,
+    schema: &str,
+    table: &str,
+) -> Result<&'static BuiltinModel, String> {
+    let stored = stored_technical_id(db, schema, table)?;
+    if stored != TECHNICAL_ID {
+        return Err(format!("model cannot be loaded: {stored}"));
+    }
+    builtin_model()
 }
 
 struct Args {
     schema: String,
+    /// Document table name. On the companion this is the parent, not `<name>_chunks`.
     table: String,
+    /// Name SQLite created this virtual table under. `name MATCH` binds to it.
+    sql_name: String,
     chunks: bool,
     model: Option<String>,
 }
@@ -350,27 +386,35 @@ fn read_args(argc: c_int, argv: *const *const c_char) -> Result<Args, String> {
         raw.push(unsafe { cstr_at(argv, i) });
     }
     let schema = raw[1].clone();
-    let mut table = raw[2].clone();
+    let sql_name = raw[2].clone();
+    let mut table = sql_name.clone();
     let mut chunks = false;
     let mut model = None;
     for arg in raw.iter().skip(3) {
-        let Some((key, value)) = split_arg(arg) else {
+        let Some((key, raw)) = split_arg(arg) else {
             return Err(format!("argument is not accepted: {arg}"));
         };
         match key {
             "companion" => {
-                if value != "1" {
+                if unquote(raw) != "1" {
                     return Err(format!("argument is not accepted: {arg}"));
                 }
                 chunks = true;
             }
             "parent" => {
+                let value = unquote(raw);
                 if value.is_empty() {
                     return Err("parent table is empty".to_string());
                 }
                 table = value;
             }
-            "model" => model = Some(value),
+            "model" => {
+                if is_unquoted_null(raw) {
+                    model = None;
+                } else {
+                    model = Some(unquote(raw));
+                }
+            }
             other => return Err(format!("argument is not accepted: {other}")),
         }
     }
@@ -380,6 +424,7 @@ fn read_args(argc: c_int, argv: *const *const c_char) -> Result<Args, String> {
     Ok(Args {
         schema,
         table,
+        sql_name,
         chunks,
         model,
     })
@@ -389,6 +434,11 @@ fn resolve_model(model: &Option<String>) -> Result<String, String> {
     let Some(value) = model else {
         return Ok(TECHNICAL_ID.to_string());
     };
+    accept_model_id(value)?;
+    Ok(value.clone())
+}
+
+pub(crate) fn accept_model_id(value: &str) -> Result<(), String> {
     if value.is_empty() {
         return Err("model is empty".to_string());
     }
@@ -402,29 +452,32 @@ fn resolve_model(model: &Option<String>) -> Result<String, String> {
         return Err(format!("model cannot be loaded: {value}"));
     }
     builtin_model()?;
-    Ok(value.clone())
+    Ok(())
 }
 
-fn split_arg(arg: &str) -> Option<(&str, String)> {
+fn split_arg(arg: &str) -> Option<(&str, &str)> {
     let (key, value) = arg.split_once('=')?;
-    let value = value.trim();
-    let value = if value.len() >= 2 {
+    Some((key.trim(), value.trim()))
+}
+
+fn unquote(value: &str) -> String {
+    if value.len() >= 2 {
         let bytes = value.as_bytes();
         let quote = bytes[0];
         if (quote == b'\'' || quote == b'"') && bytes[bytes.len() - 1] == quote {
             let inner = &value[1..value.len() - 1];
-            if quote == b'\'' {
+            return if quote == b'\'' {
                 inner.replace("''", "'")
             } else {
                 inner.replace("\"\"", "\"")
-            }
-        } else {
-            value.to_string()
+            };
         }
-    } else {
-        value.to_string()
-    };
-    Some((key.trim(), value))
+    }
+    value.to_string()
+}
+
+fn is_unquoted_null(value: &str) -> bool {
+    !value.starts_with('\'') && !value.starts_with('"') && value.eq_ignore_ascii_case("null")
 }
 
 unsafe fn cstr_at(argv: *const *const c_char, index: c_int) -> String {
@@ -437,11 +490,31 @@ unsafe fn cstr_at(argv: *const *const c_char, index: c_int) -> String {
 
 unsafe extern "C" fn vtab_best_index(
     _vtab: *mut sqlite3_vtab,
-    info: *mut libsqlite3_sys::sqlite3_index_info,
+    info: *mut sqlite3_index_info,
 ) -> c_int {
-    if !info.is_null() {
-        unsafe {
-            (*info).estimatedCost = 1_000_000.0;
+    if info.is_null() {
+        return SQLITE_OK;
+    }
+    unsafe {
+        (*info).estimatedCost = 1_000_000.0;
+        if (*info).nConstraint <= 0
+            || (*info).aConstraint.is_null()
+            || (*info).aConstraintUsage.is_null()
+        {
+            return SQLITE_OK;
+        }
+        let mut argv_index = 1;
+        for i in 0..(*info).nConstraint {
+            let constraint = &*(*info).aConstraint.add(i as usize);
+            if constraint.usable == 0 || constraint.op != SQLITE_INDEX_CONSTRAINT_MATCH as u8 {
+                continue;
+            }
+            let usage = &mut *(*info).aConstraintUsage.add(i as usize);
+            usage.argvIndex = argv_index;
+            usage.omit = 1;
+            argv_index += 1;
+            (*info).idxNum = 1;
+            (*info).estimatedCost = 10.0;
         }
     }
     SQLITE_OK
@@ -528,17 +601,47 @@ unsafe extern "C" fn vtab_close(cursor: *mut sqlite3_vtab_cursor) -> c_int {
 
 unsafe extern "C" fn vtab_filter(
     cursor: *mut sqlite3_vtab_cursor,
-    _idx_num: c_int,
+    idx_num: c_int,
     _idx_str: *const c_char,
-    _argc: c_int,
-    _argv: *mut *mut sqlite3_value,
+    argc: c_int,
+    argv: *mut *mut sqlite3_value,
 ) -> c_int {
-    guard(SQLITE_ERROR, AssertUnwindSafe(|| unsafe { filter(cursor) }))
+    guard(SQLITE_ERROR, AssertUnwindSafe(|| unsafe {
+        filter(cursor, idx_num, argc, argv)
+    }))
 }
 
-unsafe fn filter(cursor: *mut sqlite3_vtab_cursor) -> c_int {
+unsafe fn filter(
+    cursor: *mut sqlite3_vtab_cursor,
+    idx_num: c_int,
+    argc: c_int,
+    argv: *mut *mut sqlite3_value,
+) -> c_int {
     let cursor = unsafe { &mut *cursor.cast::<Cursor>() };
     let vtab = unsafe { &*cursor.base.pVtab.cast::<Vtab>() };
+    if idx_num == 1 {
+        let mut queried = false;
+        if !argv.is_null() {
+            for i in 0..argc {
+                let text = value_text(unsafe { *argv.add(i as usize) }).unwrap_or_default();
+                if !text.is_empty() {
+                    queried = true;
+                    break;
+                }
+            }
+        }
+        if !queried {
+            cursor.rows.clear();
+            cursor.index = 0;
+            return SQLITE_OK;
+        }
+        if let Err(err) = require_model(vtab) {
+            set_vtab_error(cursor.base.pVtab, &err);
+            return SQLITE_ERROR;
+        }
+        // Hybrid ranking is a separate change. A loadable model still returns
+        // the stored rows so an empty query is the only MATCH that yields none.
+    }
     match load_rows(vtab) {
         Ok(rows) => {
             cursor.rows = rows;
@@ -630,7 +733,7 @@ unsafe extern "C" fn vtab_column(
             COL_SOURCE => result_text(ctx, source),
             COL_FORMAT => result_text(ctx, format),
             COL_HASH => result_text(ctx, hash),
-            COL_SCORE => result_null(ctx),
+            COL_SCORE | COL_DOC_MATCH => result_null(ctx),
             _ => SQLITE_ERROR,
         },
         Row::Chunk {
@@ -656,7 +759,7 @@ unsafe extern "C" fn vtab_column(
                     result_null(ctx)
                 }
             }
-            COL_C_SCORE => result_null(ctx),
+            COL_C_SCORE | COL_CHUNK_MATCH => result_null(ctx),
             _ => SQLITE_ERROR,
         },
     }
@@ -733,7 +836,8 @@ unsafe fn update(
         delete_document(table, rowid)?;
         return Ok(());
     }
-    if argc != 8 {
+    // Rowid pair plus every declared column, including the hidden MATCH name.
+    if argc != 9 {
         return Err("write has the wrong number of columns".to_string());
     }
     let old_rowid = value_i64(unsafe { *argv });
@@ -785,10 +889,7 @@ fn require_text(text: Option<String>) -> Result<String, String> {
 }
 
 fn require_model(table: &Vtab) -> Result<&'static BuiltinModel, String> {
-    if !table.model_ok {
-        return Err(format!("model cannot be loaded: {TECHNICAL_ID}"));
-    }
-    builtin_model()
+    require_stored_model(table.db, &table.schema, &table.doc_name)
 }
 
 fn canonical_format(format: Option<&str>) -> Result<String, String> {
@@ -979,7 +1080,7 @@ fn value_i64(value: *mut sqlite3_value) -> Option<i64> {
     }
 }
 
-fn value_text(value: *mut sqlite3_value) -> Option<String> {
+pub(crate) fn value_text(value: *mut sqlite3_value) -> Option<String> {
     if value_is_null(value) {
         return None;
     }

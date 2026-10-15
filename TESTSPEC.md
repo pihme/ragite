@@ -2,7 +2,7 @@
 
 Status: draft, pre-1.0. Nothing here is implemented yet. Cases carry stable IDs (`TC-n`). Future tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-249 and TC-255 through TC-265. TC-250 through TC-254 belong to open pull requests and are not listed in this revision.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-249 and TC-251 through TC-265. TC-250 belongs to an open pull request and is not listed in this revision.
 
 ## Conventions
 
@@ -554,3 +554,10 @@ Unless a case says otherwise:
 ## REQ-94
 
 - **TC-249** A DoclingDocument whose text items are named `a/b` and `a~b` is reached by `$ref` values `#/texts/a~1b` and `#/texts/a~0b`. The Chunks are `slash` and `tilde`, in that order. `meta_json` `element` is the reference that was walked.
+
+## REQ-96
+
+- **TC-251** `SELECT` from `docs_chunks` with `rowid` equal to a Chunk id returns that Chunk and no other. `EXPLAIN QUERY PLAN` reports `INDEX 2:rowid`. The same equality on `docs.rowid` returns that Document. When `MATCH` is also usable, the plan stays the search (`INDEX 1:`). An empty `MATCH` combined with a `rowid` equality returns no row. `rowid = 2.5` and `rowid = '2.5'` return no row on `docs` and on `docs_chunks`, and that plan is still `INDEX 2:rowid`. `rowid = 2.0` and `rowid = '2'` return the row whose id is 2.
+- **TC-252** `rowid` equal to an id that is not stored returns no row and does not fail, on `docs` and on `docs_chunks`.
+- **TC-253** A query with no `rowid` equality returns every Chunk in `doc_id` order, then Chunk id order. `EXPLAIN QUERY PLAN` reports `INDEX 0:`. An inequality such as `rowid > 1` still returns the later Chunks and does not use the unique lookup.
+- **TC-254** A KNN query on `docs_vec` joined to `docs_chunks` on `docs_chunks.rowid` returns that Chunk. `EXPLAIN QUERY PLAN` uses `INDEX 2:rowid` for the companion.

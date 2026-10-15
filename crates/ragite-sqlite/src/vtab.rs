@@ -7,10 +7,11 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
 use libsqlite3_sys::{
-    SQLITE_ERROR, SQLITE_FLOAT, SQLITE_INDEX_CONSTRAINT_MATCH, SQLITE_INTEGER, SQLITE_NULL,
-    SQLITE_OK, SQLITE_TEXT, SQLITE_TRANSIENT, sqlite3, sqlite3_declare_vtab, sqlite3_free,
-    sqlite3_index_info, sqlite3_module, sqlite3_value, sqlite3_value_bytes, sqlite3_value_int64,
-    sqlite3_value_text, sqlite3_value_type, sqlite3_vtab, sqlite3_vtab_cursor,
+    SQLITE_ERROR, SQLITE_FLOAT, SQLITE_INDEX_CONSTRAINT_EQ, SQLITE_INDEX_CONSTRAINT_MATCH,
+    SQLITE_INDEX_SCAN_UNIQUE, SQLITE_INTEGER, SQLITE_NULL, SQLITE_OK, SQLITE_TEXT,
+    SQLITE_TRANSIENT, sqlite3, sqlite3_declare_vtab, sqlite3_free, sqlite3_index_info,
+    sqlite3_module, sqlite3_value, sqlite3_value_bytes, sqlite3_value_int64, sqlite3_value_text,
+    sqlite3_value_type, sqlite3_vtab, sqlite3_vtab_cursor,
 };
 use ragite_core::{
     BuiltinModel, Chunk, FUSION_DEPTH, FusedChunk, Role, TECHNICAL_ID, best_document_scores,
@@ -26,6 +27,7 @@ const CHUNK_COLUMNS: &str = "chunk TEXT, doc_id INTEGER, source TEXT, start INTE
 
 const IDX_SCAN: c_int = 0;
 const IDX_MATCH: c_int = 1;
+const IDX_ROWID: c_int = 2;
 
 const COL_DOC_ID: c_int = 0;
 const COL_TEXT: c_int = 1;
@@ -563,19 +565,43 @@ unsafe fn best_index(info: *mut sqlite3_index_info) -> c_int {
     let n = info.nConstraint as usize;
     let constraints = unsafe { std::slice::from_raw_parts(info.aConstraint, n) };
     let usage = unsafe { std::slice::from_raw_parts_mut(info.aConstraintUsage, n) };
+    let mut match_at = None;
+    let mut rowid_at = None;
     for (index, constraint) in constraints.iter().enumerate() {
         if constraint.usable == 0 {
             continue;
         }
-        if constraint.op != SQLITE_INDEX_CONSTRAINT_MATCH as u8 {
-            continue;
+        if match_at.is_none() && constraint.op == SQLITE_INDEX_CONSTRAINT_MATCH as u8 {
+            match_at = Some(index);
         }
+        if rowid_at.is_none()
+            && constraint.iColumn == -1
+            && constraint.op == SQLITE_INDEX_CONSTRAINT_EQ as u8
+        {
+            rowid_at = Some(index);
+        }
+    }
+    // SQLite cannot recheck MATCH. When it is usable, that search is the plan.
+    if let Some(index) = match_at {
         usage[index].argvIndex = 1;
         usage[index].omit = 1;
         info.idxNum = IDX_MATCH;
         info.estimatedCost = 10.0;
         info.estimatedRows = FUSION_DEPTH as i64;
-        break;
+        return SQLITE_OK;
+    }
+    if let Some(index) = rowid_at {
+        usage[index].argvIndex = 1;
+        // sqlite3_value_int64 truncates a non-integral value. Leaving the
+        // constraint in place lets SQLite reject 2.5 and '2.5' the same way
+        // a rowid table does, while 2.0 and '2' still match (REQ-96).
+        usage[index].omit = 0;
+        info.idxNum = IDX_ROWID;
+        info.idxStr = c"rowid".as_ptr().cast_mut();
+        info.needToFreeIdxStr = 0;
+        info.estimatedCost = 1.0;
+        info.estimatedRows = 1;
+        info.idxFlags = SQLITE_INDEX_SCAN_UNIQUE;
     }
     SQLITE_OK
 }
@@ -697,6 +723,11 @@ unsafe fn filter(
             String::new()
         };
         search_rows(vtab, &query)
+    } else if idx_num == IDX_ROWID {
+        match unsafe { rowid_argument(argc, argv) } {
+            Some(rowid) => load_row(vtab, rowid),
+            None => Ok(Vec::new()),
+        }
     } else {
         load_rows(vtab)
     };
@@ -757,6 +788,64 @@ fn load_rows(vtab: &Vtab) -> Result<Vec<Row>, String> {
             });
         }
         Ok(rows)
+    }
+}
+
+unsafe fn rowid_argument(argc: c_int, argv: *mut *mut sqlite3_value) -> Option<i64> {
+    if argc < 1 || argv.is_null() {
+        return None;
+    }
+    let value = unsafe { *argv };
+    if value.is_null() || unsafe { sqlite3_value_type(value) } == SQLITE_NULL {
+        return None;
+    }
+    Some(unsafe { sqlite3_value_int64(value) })
+}
+
+fn load_row(vtab: &Vtab, rowid: i64) -> Result<Vec<Row>, String> {
+    if vtab.chunks {
+        let sql = format!(
+            "SELECT c.chunk_id, c.doc_id, d.source, c.start, c.end, c.heading_path, c.text, c.meta_json
+             FROM {chunks} c
+             JOIN {docs} d ON d.doc_id = c.doc_id
+             WHERE c.chunk_id = ?1",
+            chunks = sql::qualified(&vtab.schema, &format!("{}_chunk_rows", vtab.doc_name)),
+            docs = sql::qualified(&vtab.schema, &format!("{}_documents", vtab.doc_name)),
+        );
+        let stmt = Stmt::prepare(vtab.db, &sql)?;
+        stmt.bind_i64(1, rowid)?;
+        if !stmt.step()? {
+            return Ok(Vec::new());
+        }
+        Ok(vec![Row::Chunk {
+            chunk_id: stmt.column_i64(0),
+            doc_id: stmt.column_i64(1),
+            source: stmt.column_text(2).unwrap_or_default(),
+            start: stmt.column_i64(3),
+            end: stmt.column_i64(4),
+            heading_path: stmt.column_text(5).unwrap_or_else(|| "[]".to_string()),
+            text: stmt.column_text(6).unwrap_or_default(),
+            meta_json: stmt.column_text(7),
+            score: None,
+        }])
+    } else {
+        let sql = format!(
+            "SELECT doc_id, text, source, format, hash FROM {} WHERE doc_id = ?1",
+            sql::qualified(&vtab.schema, &format!("{}_documents", vtab.doc_name))
+        );
+        let stmt = Stmt::prepare(vtab.db, &sql)?;
+        stmt.bind_i64(1, rowid)?;
+        if !stmt.step()? {
+            return Ok(Vec::new());
+        }
+        Ok(vec![Row::Doc {
+            doc_id: stmt.column_i64(0),
+            text: stmt.column_text(1).unwrap_or_default(),
+            source: stmt.column_text(2).unwrap_or_default(),
+            format: stmt.column_text(3).unwrap_or_default(),
+            hash: stmt.column_text(4).unwrap_or_default(),
+            score: None,
+        }])
     }
 }
 

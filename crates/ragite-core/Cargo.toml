@@ -1,0 +1,17 @@
+[package]
+name = "ragite-core"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Chunking and embedding for ragite, with no SQLite dependency"
+publish = false
+
+[features]
+default = ["builtin-model"]
+builtin-model = []
+
+[dependencies]
+model2vec-rs = { version = "0.3.0", default-features = false, features = ["onig"] }
+serde_json = "1"
+sha2 = "0.10"

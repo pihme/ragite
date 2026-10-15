@@ -2,7 +2,7 @@
 
 Status: draft, pre-1.0. Nothing here is implemented yet. Cases carry stable IDs (`TC-n`). Future tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-240.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-246.
 
 ## Conventions
 
@@ -297,7 +297,8 @@ Unless a case says otherwise:
 ## REQ-49
 
 - **TC-135** A body text item, a table, a picture's caption text item, and a key-value item each produce Chunks. The same four kinds produce Chunks when they sit in furniture.
-- **TC-136** A title item and a section-header item produce Chunks. Their text is the heading path of the body Chunks under them. An item is kept when its label is a header, and when it belongs to furniture.
+- **TC-136** A title item and a section-header item produce Chunks. Their text is the heading path of the body Chunks that follow them in reading order, until a later heading of the same level or a level above. An item is kept when its label is a header, and when it belongs to furniture.
+- **TC-241** Sibling headings in the body, with empty `children`, still fill `heading_path` and `meta_json` `section` for the items that follow. A title is above a level-1 section header. A level-1 header ends a previous level-1 header and keeps the title. A level-2 header sits under the open level-1 header. A missing `level` is level 1. A heading Chunk's own path lists only the headings above it. A nested child of a heading and the next sibling after that heading see the same path.
 - **TC-137** An item with no characters produces no Chunk, on either tree.
 
 ## REQ-50
@@ -375,7 +376,7 @@ Unless a case says otherwise:
 
 ## REQ-60
 
-- **TC-179** `a\r\n\r\nb` produces Chunks `a` and `b`. `a\n \nb` and `a\n\tb` produce Chunks `a` and `b`.
+- **TC-179** `a\r\n\r\nb` produces Chunks `a` and `b`. `a\n \nb` and `a\n\t\nb` produce Chunks `a` and `b`. A tab or space is a blank line only when it sits between two line endings.
 - **TC-180** `a\rb\n\nc` produces a Chunk `a\rb`. The stored Document text still contains the `\r`.
 
 ## REQ-61
@@ -414,6 +415,7 @@ Unless a case says otherwise:
 - **TC-194** `ragite_table_model('docs')` returns the technical identifier stored at `CREATE`.
 - **TC-195** It still returns that identifier when the loaded extension cannot load that Model.
 - **TC-196** `ragite_table_model('docs_chunks')` and `ragite_table_model('missing')` fail, and the error includes that name.
+- **TC-244** After `CREATE VIRTUAL TABLE Mixed USING ragite`, `ragite_table_model('mixed')` and `ragite_embed('mixed', ...)` use that table. `MAIN.Mixed` matches it as well. The returned technical identifier is the one stored for `Mixed`.
 
 ## REQ-68
 
@@ -499,8 +501,8 @@ Unless a case says otherwise:
 
 ## REQ-84
 
-- **TC-231** `BEGIN`, `INSERT` of a Document that has Chunks, `ROLLBACK` removes those rows, and the next `INSERT` receives a greater `doc_id` and greater Chunk ids than the ids allocated inside the transaction.
-- **TC-232** A statement that fails after allocating ids does not reuse those ids. `sqlite_sequence` is not moved backward.
+- **TC-231** `BEGIN`, `INSERT` of a Document that has Chunks, `ROLLBACK` removes those rows. The next `INSERT` follows SQLite `AUTOINCREMENT`. On a fresh Table that next `doc_id` and Chunk id are 1.
+- **TC-232** An `INSERT` of two rows whose second format is `text/csv` fails and leaves no Document. The next `INSERT` on that fresh Table receives `doc_id` 1.
 
 ## REQ-85
 
@@ -516,3 +518,19 @@ Unless a case says otherwise:
 
 - **TC-237** The extension exports the symbol `sqlite3_ragite_init`.
 - **TC-238** `SELECT load_extension('ragite')` loads that symbol and registers the `ragite` virtual table module.
+
+## REQ-88
+
+- **TC-243** `CREATE VIRTUAL TABLE evil USING ragite(companion=1, parent=docs)` fails with `argument is not accepted: companion` and leaves no `evil` table. `CREATE VIRTUAL TABLE other USING ragite(parent=docs)` fails with `argument is not accepted: parent`. The companion ragite created for `docs` still reads after that database is opened again.
+
+## REQ-89
+
+- **TC-242** `ALTER TABLE docs RENAME TO docs9` fails with `rename is not accepted`. `docs` still returns the inserted text, no `docs9` table exists, and `DROP TABLE docs` removes the table. `ALTER TABLE docs_chunks RENAME` fails the same way, and `docs_chunks` still reads.
+
+## REQ-90
+
+- **TC-245** `DROP TABLE docs_chunks` fails with SQLite's generic logic error. `docs` and `docs_chunks` both still accept `SELECT`.
+
+## REQ-91
+
+- **TC-246** For every sentence in `tests/parity/reference.json`, `ragite_embed_model` with the default Model and role `passage` returns a vector of the same dimension whose cosine with the reference vector is at least 0.99. The file's `model` equals the default technical identifier.

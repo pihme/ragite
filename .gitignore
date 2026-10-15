@@ -10,3 +10,10 @@
 !.env.example
 # release.py output
 release-out/
+# Cargo
+/target
+
+bench/.models/
+bench/results/
+__pycache__/
+*.pyc

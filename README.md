@@ -38,7 +38,7 @@ If you want different presets, fork the repository and change the requirements.
 
 See [ROADMAP.md](ROADMAP.md) for what versions 1.0 and 2.0 will deliver.
 
-Pre-1.0, specification only. There is no code, no release and no package yet. The design lives in [SPEC.md](SPEC.md); the default embedding model is still open and will be chosen by benchmark.
+Pre-1.0. The design lives in [SPEC.md](SPEC.md). Version 1 uses potion-base-8M, chunks of at most 512 Unicode scalars with an overlap of 64, and takes 50 chunks from each ranking.
 
 ## Contributing
 

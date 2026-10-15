@@ -1,0 +1,10 @@
+hello
+SQLite is a small, fast, self-contained SQL database engine.
+The quick brown fox jumps over the lazy dog.
+Hybrid search fuses a vector ranking and a full-text ranking with Reciprocal Rank Fusion.
+How do I store embeddings next to my documents?
+Der Bericht beschreibt die Ergebnisse des zweiten Quartals.
+Docling converts PDF files into a structured JSON document.
+   leading and trailing spaces   
+Numbers like 3.14159 and 2026-10-15 should embed without errors.
+A very short one.

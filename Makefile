@@ -1,5 +1,8 @@
 .PHONY: test
 test:
+	# The license test runs `cargo metadata --offline`, which resolves every
+	# target. A host build never downloads wasm-only crates such as bumpalo.
+	cargo fetch --locked
 	env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
 	cargo build -p ragite-sqlite
 	env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \

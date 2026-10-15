@@ -2,7 +2,7 @@
 """Generate the parity reference vectors for the bundled default Model.
 
 The reference is the upstream Python implementation of the Model. For a
-Model2Vec model (potion-base-8M) that is the `model2vec` package, which is
+Model2Vec model (potion-retrieval-32M) that is the `model2vec` package, which is
 NumPy-only and needs no PyTorch. For a transformer candidate the benchmark
 harness uses sentence-transformers (PyTorch) instead, see bench/README.md.
 
@@ -19,8 +19,8 @@ import pathlib
 import model2vec
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-MODEL_DIR = ROOT / "models" / "potion-base-8M"
-TECHNICAL_ID = "potion-base-8M@bf8b056651a2c21b8d2565580b8569da283cab23"
+MODEL_DIR = ROOT / "models" / "potion-retrieval-32M"
+TECHNICAL_ID = "potion-retrieval-32M@6fc8051fab2a1e0ee76689cf08c853792ac285e7"
 
 
 def main() -> None:

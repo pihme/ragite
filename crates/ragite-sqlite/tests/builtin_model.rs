@@ -1,4 +1,4 @@
-//! Default build: the extension embeds potion-base-8M.
+//! Default build: the extension embeds potion-retrieval-32M.
 
 #[allow(dead_code)]
 mod common;
@@ -7,7 +7,9 @@ use std::path::PathBuf;
 
 use common::extension_path;
 
-const CONFIG_MARKER: &[u8] = b"baai/bge-base-en-v1.5";
+// `hidden_dim` tells the potion-retrieval-32M config (512) from the potion-base-8M
+// fixture (256); both name the same tokenizer.
+const CONFIG_MARKER: &[u8] = b"\"hidden_dim\": 512";
 
 #[test]
 fn tc_6_tc_52_default_build_embeds_model2vec_weights() {

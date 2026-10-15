@@ -16,6 +16,16 @@ fn main() {
     println!("cargo:rerun-if-env-changed=RAGITE_PASSAGE_PREFIX");
     println!("cargo:rustc-check-cfg=cfg(ragite_provider_model)");
 
+    if std::env::var_os("CARGO_FEATURE_BUILTIN_MODEL").is_some() {
+        let dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"))
+            .join("../../models/potion-retrieval-32M");
+        for name in ["tokenizer.json", "model.safetensors", "config.json"] {
+            let file = dir.join(name);
+            println!("cargo:rerun-if-changed={}", file.display());
+            require_real_file(&file);
+        }
+    }
+
     let path = std::env::var("RAGITE_MODEL_PATH").unwrap_or_default();
     if path.is_empty() {
         return;
@@ -40,6 +50,7 @@ fn main() {
             );
         }
         println!("cargo:rerun-if-changed={}", file.display());
+        require_real_file(file);
     }
 
     let name = token("RAGITE_MODEL_NAME");
@@ -101,4 +112,19 @@ fn rustc_env(key: &str, path: &std::path::Path) {
         .to_str()
         .unwrap_or_else(|| panic!("{key} path is not utf-8"));
     println!("cargo:rustc-env={key}={text}");
+}
+
+/// Fail the build with a clear message when a model file is a Git LFS pointer
+/// (the repository was cloned without `git lfs pull`) instead of the real file.
+fn require_real_file(file: &std::path::Path) {
+    let mut head = [0u8; 64];
+    let n = fs::File::open(file)
+        .and_then(|mut f| std::io::Read::read(&mut f, &mut head))
+        .unwrap_or_else(|err| panic!("cannot read model file {}: {err}", file.display()));
+    if head[..n].starts_with(b"version https://git-lfs") {
+        panic!(
+            "model file {} is a Git LFS pointer, not the real file; run `git lfs pull`",
+            file.display()
+        );
+    }
 }

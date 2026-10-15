@@ -4,7 +4,7 @@ mod common;
 
 use common::{HELLO_SHA, cell, ok, parse_json, sql};
 
-const DIMENSION: usize = 256;
+const DIMENSION: usize = 512;
 const SENTINEL: &str = "SENTINEL_ragite_text_9f3a";
 
 struct ModelId {
@@ -136,7 +136,7 @@ fn tc_56_tc_106_tc_121_tc_126_tc_127_tc_128_tc_185_rejected_model_on_create() {
          SELECT count(*) AS n FROM sqlite_master WHERE name GLOB 'docs*';
          CREATE VIRTUAL TABLE docs USING ragite(query_prefix='query: ', passage_prefix='passage: ');
          SELECT count(*) AS n FROM sqlite_master WHERE name GLOB 'docs*';
-         CREATE VIRTUAL TABLE docs USING ragite(revision='bf8b056651a2c21b8d2565580b8569da283cab23');
+         CREATE VIRTUAL TABLE docs USING ragite(revision='6fc8051fab2a1e0ee76689cf08c853792ac285e7');
          SELECT count(*) AS n FROM sqlite_master WHERE name GLOB 'docs*';",
         bare = model.name,
         bad = bad,

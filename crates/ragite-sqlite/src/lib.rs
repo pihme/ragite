@@ -1,5 +1,6 @@
 //! Thin SQLite loadable extension. Chunking and embedding live in `ragite-core`.
 
+mod func;
 mod sql;
 mod vtab;
 
@@ -61,6 +62,10 @@ unsafe fn init(
     if rc != SQLITE_OK {
         set_pz(pz_err, "ragite could not register its module");
         return rc;
+    }
+    if let Err(err) = func::register(db) {
+        set_pz(pz_err, &err);
+        return SQLITE_ERROR;
     }
     SQLITE_OK
 }

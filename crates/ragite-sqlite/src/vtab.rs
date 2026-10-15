@@ -74,6 +74,9 @@ struct Vtab {
     schema: String,
     doc_name: String,
     chunks: bool,
+    /// Connect-time result of `read_model_ok`. Writers re-read the shadow row,
+    /// because `<name>_model` can change without a reconnect.
+    #[allow(dead_code)]
     model_ok: bool,
 }
 
@@ -348,7 +351,11 @@ unsafe fn connect(
     Ok(())
 }
 
-fn read_model_ok(db: *mut sqlite3, schema: &str, table: &str) -> Result<bool, String> {
+pub(crate) fn stored_technical_id(
+    db: *mut sqlite3,
+    schema: &str,
+    table: &str,
+) -> Result<String, String> {
     let sql = format!(
         "SELECT technical_id FROM {}",
         sql::qualified(schema, &format!("{table}_model"))
@@ -357,13 +364,31 @@ fn read_model_ok(db: *mut sqlite3, schema: &str, table: &str) -> Result<bool, St
     if !stmt.step()? {
         return Err(format!("stored model is missing: {table}"));
     }
-    let stored = stmt.column_text(0).unwrap_or_default();
+    Ok(stmt.column_text(0).unwrap_or_default())
+}
+
+fn read_model_ok(db: *mut sqlite3, schema: &str, table: &str) -> Result<bool, String> {
+    let stored = stored_technical_id(db, schema, table)?;
     Ok(stored == TECHNICAL_ID && builtin_model().is_ok())
+}
+
+pub(crate) fn require_stored_model(
+    db: *mut sqlite3,
+    schema: &str,
+    table: &str,
+) -> Result<&'static BuiltinModel, String> {
+    let stored = stored_technical_id(db, schema, table)?;
+    if stored != TECHNICAL_ID {
+        return Err(format!("model cannot be loaded: {stored}"));
+    }
+    builtin_model()
 }
 
 struct Args {
     schema: String,
+    /// Document table name. On the companion this is the parent, not `<name>_chunks`.
     table: String,
+    /// Name SQLite created this virtual table under. `name MATCH` binds to it.
     vtab_name: String,
     chunks: bool,
     model: Option<String>,
@@ -383,23 +408,30 @@ fn read_args(argc: c_int, argv: *const *const c_char) -> Result<Args, String> {
     let mut chunks = false;
     let mut model = None;
     for arg in raw.iter().skip(3) {
-        let Some((key, value)) = split_arg(arg) else {
+        let Some((key, raw)) = split_arg(arg) else {
             return Err(format!("argument is not accepted: {arg}"));
         };
         match key {
             "companion" => {
-                if value != "1" {
+                if unquote(raw) != "1" {
                     return Err(format!("argument is not accepted: {arg}"));
                 }
                 chunks = true;
             }
             "parent" => {
+                let value = unquote(raw);
                 if value.is_empty() {
                     return Err("parent table is empty".to_string());
                 }
                 table = value;
             }
-            "model" => model = Some(value),
+            "model" => {
+                if is_unquoted_null(raw) {
+                    model = None;
+                } else {
+                    model = Some(unquote(raw));
+                }
+            }
             other => return Err(format!("argument is not accepted: {other}")),
         }
     }
@@ -419,6 +451,11 @@ fn resolve_model(model: &Option<String>) -> Result<String, String> {
     let Some(value) = model else {
         return Ok(TECHNICAL_ID.to_string());
     };
+    accept_model_id(value)?;
+    Ok(value.clone())
+}
+
+pub(crate) fn accept_model_id(value: &str) -> Result<(), String> {
     if value.is_empty() {
         return Err("model is empty".to_string());
     }
@@ -432,29 +469,32 @@ fn resolve_model(model: &Option<String>) -> Result<String, String> {
         return Err(format!("model cannot be loaded: {value}"));
     }
     builtin_model()?;
-    Ok(value.clone())
+    Ok(())
 }
 
-fn split_arg(arg: &str) -> Option<(&str, String)> {
+fn split_arg(arg: &str) -> Option<(&str, &str)> {
     let (key, value) = arg.split_once('=')?;
-    let value = value.trim();
-    let value = if value.len() >= 2 {
+    Some((key.trim(), value.trim()))
+}
+
+fn unquote(value: &str) -> String {
+    if value.len() >= 2 {
         let bytes = value.as_bytes();
         let quote = bytes[0];
         if (quote == b'\'' || quote == b'"') && bytes[bytes.len() - 1] == quote {
             let inner = &value[1..value.len() - 1];
-            if quote == b'\'' {
+            return if quote == b'\'' {
                 inner.replace("''", "'")
             } else {
                 inner.replace("\"\"", "\"")
-            }
-        } else {
-            value.to_string()
+            };
         }
-    } else {
-        value.to_string()
-    };
-    Some((key.trim(), value))
+    }
+    value.to_string()
+}
+
+fn is_unquoted_null(value: &str) -> bool {
+    !value.starts_with('\'') && !value.starts_with('"') && value.eq_ignore_ascii_case("null")
 }
 
 unsafe fn cstr_at(argv: *const *const c_char, index: c_int) -> String {
@@ -1023,6 +1063,7 @@ unsafe fn update(
         delete_document(table, rowid)?;
         return Ok(());
     }
+    // Rowid pair plus every declared column, including the hidden MATCH name.
     if argc != 9 {
         return Err("write has the wrong number of columns".to_string());
     }
@@ -1075,10 +1116,7 @@ fn require_text(text: Option<String>) -> Result<String, String> {
 }
 
 fn require_model(table: &Vtab) -> Result<&'static BuiltinModel, String> {
-    if !table.model_ok {
-        return Err(format!("model cannot be loaded: {TECHNICAL_ID}"));
-    }
-    builtin_model()
+    require_stored_model(table.db, &table.schema, &table.doc_name)
 }
 
 fn canonical_format(format: Option<&str>) -> Result<String, String> {
@@ -1277,7 +1315,7 @@ fn value_i64(value: *mut sqlite3_value) -> Option<i64> {
     }
 }
 
-fn value_text(value: *mut sqlite3_value) -> Option<String> {
+pub(crate) fn value_text(value: *mut sqlite3_value) -> Option<String> {
     if value_is_null(value) {
         return None;
     }

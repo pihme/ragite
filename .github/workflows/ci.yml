@@ -124,16 +124,6 @@ jobs:
       - name: Install sqlite3
         run: sudo apt-get update && sudo apt-get install -y sqlite3
 
-      # TEMPORARY (removed before merge): the same build without the new profile settings.
-      - name: Measure the old release build
-        run: |
-          cargo fetch --locked
-          start=$(date +%s)
-          env -u RAGITE_MODEL_PATH cargo build -p ragite-sqlite --release --target-dir target/before \
-            --config 'profile.release.lto=false' --config 'profile.release.codegen-units=16' --config 'profile.release.strip=false'
-          echo "BEFORE_S=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
-          echo "BEFORE_B=$(stat -c %s target/before/release/libragite.so)" >> "$GITHUB_ENV"
-
       - name: Build the release extension
         run: |
           start=$(date +%s)
@@ -158,10 +148,9 @@ jobs:
           {
             echo '## Release profile'
             echo
-            echo '| build | libragite.so bytes | build seconds |'
-            echo '| --- | --- | --- |'
-            echo "| before (lto=false, cgu=16, no strip) | ${BEFORE_B:-n/a} | ${BEFORE_S:-n/a} |"
-            echo "| after (fat LTO, cgu=1, strip) | $AFTER_B | $AFTER_S |"
+            echo '| libragite.so bytes | build seconds |'
+            echo '| --- | --- |'
+            echo "| $AFTER_B | $AFTER_S |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Open or update the release pull request after tests pass on main.

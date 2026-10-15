@@ -1,0 +1,12 @@
+{
+ "model": "potion-base-8M@bf8b056651a2c21b8d2565580b8569da283cab23",
+ "commit": "9d283ec690a0ca577cb9f45d4ddfeb757aa4e09e",
+ "machine": "grok-bot-vm-416642740",
+ "cpus": 8,
+ "binary_bytes": 37783528,
+ "db_bytes": 49385472,
+ "peak_rss_kb": 263220,
+ "chunks_per_second": 5379.5,
+ "latency_ms_p50": 9.14,
+ "latency_ms_p95": 11.52
+}

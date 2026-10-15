@@ -1,0 +1,28 @@
+{
+ "model": "potion-multilingual-128M@73908c3438cf03b6a01bcb9611d62b23d0726f08",
+ "dataset": {
+  "id": "mteb/fiqa",
+  "revision": "main",
+  "skipped_empty_docs": 38
+ },
+ "docs": 57600,
+ "queries": 648,
+ "chunks": 118531,
+ "index_seconds": 39.791,
+ "chunks_per_second": 2978.9,
+ "commit": "e3ddacbf9b4bc7f2e4a4f2ea7e90114fb7039300",
+ "modes": {
+  "hybrid": {
+   "ndcg@10": 0.1143,
+   "recall@10": 0.1522,
+   "latency_ms_p50": 45.1,
+   "latency_ms_p95": 46.98
+  },
+  "vector": {
+   "ndcg@10": 0.1131,
+   "recall@10": 0.1514,
+   "latency_ms_p50": 43.28,
+   "latency_ms_p95": 43.63
+  }
+ }
+}

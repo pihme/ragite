@@ -1,9 +1,11 @@
 //! Chunking, embedding, and fusion for ragite. This crate does not link SQLite.
 
 mod chunk;
+mod fusion;
 mod model;
 
 pub use chunk::{Chunk, chunk_docling, chunk_html, chunk_markdown, chunk_plain};
+pub use fusion::{FusedChunk, best_document_scores, order_fused_chunks, reciprocal_rank_fusion};
 pub use model::{BuiltinModel, Role, builtin_model};
 
 /// Unicode scalars copied onto the next piece when a unit is split.
@@ -17,8 +19,7 @@ pub const FUSION_DEPTH: usize = 50;
 
 pub const MODEL_NAME: &str = "potion-base-8M";
 
-pub const TECHNICAL_ID: &str =
-    "potion-base-8M@bf8b056651a2c21b8d2565580b8569da283cab23";
+pub const TECHNICAL_ID: &str = "potion-base-8M@bf8b056651a2c21b8d2565580b8569da283cab23";
 
 pub const DIMENSION: usize = 256;
 

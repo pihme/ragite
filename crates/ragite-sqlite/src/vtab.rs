@@ -1,28 +1,31 @@
 //! Virtual tables `ragite` (documents) and the read-only companion `<name>_chunks`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::mem;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
 use libsqlite3_sys::{
-    sqlite3, sqlite3_declare_vtab, sqlite3_free, sqlite3_module, sqlite3_value,
-    sqlite3_value_bytes, sqlite3_value_int64, sqlite3_value_text, sqlite3_value_type,
-    sqlite3_vtab, sqlite3_vtab_cursor, SQLITE_ERROR, SQLITE_FLOAT, SQLITE_INTEGER, SQLITE_NULL,
-    SQLITE_OK, SQLITE_TEXT, SQLITE_TRANSIENT,
+    SQLITE_ERROR, SQLITE_FLOAT, SQLITE_INDEX_CONSTRAINT_MATCH, SQLITE_INTEGER, SQLITE_NULL,
+    SQLITE_OK, SQLITE_TEXT, SQLITE_TRANSIENT, sqlite3, sqlite3_declare_vtab, sqlite3_free,
+    sqlite3_index_info, sqlite3_module, sqlite3_value, sqlite3_value_bytes, sqlite3_value_int64,
+    sqlite3_value_text, sqlite3_value_type, sqlite3_vtab, sqlite3_vtab_cursor,
 };
 use ragite_core::{
-    BuiltinModel, Chunk, Role, TECHNICAL_ID, builtin_model, chunk_docling, chunk_html, chunk_markdown,
-    chunk_plain, heading_path_json,
-    sha256_hex,
+    BuiltinModel, Chunk, FUSION_DEPTH, FusedChunk, Role, TECHNICAL_ID, best_document_scores,
+    builtin_model, chunk_docling, chunk_html, chunk_markdown, chunk_plain, heading_path_json,
+    order_fused_chunks, reciprocal_rank_fusion, sha256_hex,
 };
 
 use crate::sql::{self, Stmt};
 
-const DOC_SCHEMA: &str =
-    "CREATE TABLE x(doc_id INTEGER, text TEXT, source TEXT, format TEXT, hash TEXT, score REAL)";
-const CHUNK_SCHEMA: &str = "CREATE TABLE x(chunk TEXT, doc_id INTEGER, source TEXT, start INTEGER, end INTEGER, heading_path TEXT, meta_json TEXT, score REAL)";
+const DOC_COLUMNS: &str =
+    "doc_id INTEGER, text TEXT, source TEXT, format TEXT, hash TEXT, score REAL";
+const CHUNK_COLUMNS: &str = "chunk TEXT, doc_id INTEGER, source TEXT, start INTEGER, end INTEGER, heading_path TEXT, meta_json TEXT, score REAL";
+
+const IDX_SCAN: c_int = 0;
+const IDX_MATCH: c_int = 1;
 
 const COL_DOC_ID: c_int = 0;
 const COL_TEXT: c_int = 1;
@@ -40,8 +43,7 @@ const COL_PATH: c_int = 5;
 const COL_META: c_int = 6;
 const COL_C_SCORE: c_int = 7;
 
-static ALLOW_DROP: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
+static ALLOW_DROP: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 
 pub fn module() -> &'static sqlite3_module {
     static MODULE: OnceLock<sqlite3_module> = OnceLock::new();
@@ -89,6 +91,7 @@ enum Row {
         source: String,
         format: String,
         hash: String,
+        score: Option<f64>,
     },
     Chunk {
         chunk_id: i64,
@@ -99,7 +102,15 @@ enum Row {
         heading_path: String,
         text: String,
         meta_json: Option<String>,
+        score: Option<f64>,
     },
+}
+
+/// `name MATCH ?` resolves only when a column is named `name`. The column is hidden.
+fn declared_schema(chunks: bool, vtab_name: &str) -> String {
+    let hidden = sql::quote_ident(vtab_name);
+    let columns = if chunks { CHUNK_COLUMNS } else { DOC_COLUMNS };
+    format!("CREATE TABLE x({columns}, {hidden} HIDDEN)")
 }
 
 fn drop_key(schema: &str, name: &str) -> String {
@@ -121,17 +132,20 @@ unsafe extern "C" fn vtab_create(
     pp_vtab: *mut *mut sqlite3_vtab,
     pz_err: *mut *mut c_char,
 ) -> c_int {
-    guard(SQLITE_ERROR, AssertUnwindSafe(|| unsafe {
-        match create(db, argc, argv, pp_vtab) {
-            Ok(()) => SQLITE_OK,
-            Err(msg) => {
-                if !pz_err.is_null() {
-                    *pz_err = sql::alloc_text(&msg);
+    guard(
+        SQLITE_ERROR,
+        AssertUnwindSafe(|| unsafe {
+            match create(db, argc, argv, pp_vtab) {
+                Ok(()) => SQLITE_OK,
+                Err(msg) => {
+                    if !pz_err.is_null() {
+                        *pz_err = sql::alloc_text(&msg);
+                    }
+                    SQLITE_ERROR
                 }
-                SQLITE_ERROR
             }
-        }
-    }))
+        }),
+    )
 }
 
 unsafe extern "C" fn vtab_connect(
@@ -142,17 +156,20 @@ unsafe extern "C" fn vtab_connect(
     pp_vtab: *mut *mut sqlite3_vtab,
     pz_err: *mut *mut c_char,
 ) -> c_int {
-    guard(SQLITE_ERROR, AssertUnwindSafe(|| unsafe {
-        match connect(db, argc, argv, pp_vtab, false) {
-            Ok(()) => SQLITE_OK,
-            Err(msg) => {
-                if !pz_err.is_null() {
-                    *pz_err = sql::alloc_text(&msg);
+    guard(
+        SQLITE_ERROR,
+        AssertUnwindSafe(|| unsafe {
+            match connect(db, argc, argv, pp_vtab, false) {
+                Ok(()) => SQLITE_OK,
+                Err(msg) => {
+                    if !pz_err.is_null() {
+                        *pz_err = sql::alloc_text(&msg);
+                    }
+                    SQLITE_ERROR
                 }
-                SQLITE_ERROR
             }
-        }
-    }))
+        }),
+    )
 }
 
 unsafe fn create(
@@ -239,7 +256,10 @@ fn create_shadows(
         db,
         &format!("CREATE TABLE {model_table} (technical_id TEXT NOT NULL)"),
     )?;
-    let insert = Stmt::prepare(db, &format!("INSERT INTO {model_table} (technical_id) VALUES (?1)"))?;
+    let insert = Stmt::prepare(
+        db,
+        &format!("INSERT INTO {model_table} (technical_id) VALUES (?1)"),
+    )?;
     insert.bind_text(1, model_id)?;
     insert.step()?;
     sql::exec(
@@ -271,7 +291,13 @@ fn destroy_shadows(db: *mut sqlite3, schema: &str, table: &str) -> Result<(), St
     let companion = format!("{table}_chunks");
     let key = drop_key(schema, &companion);
     ALLOW_DROP.lock().expect("drop set").insert(key.clone());
-    let drop_companion = sql::exec(db, &format!("DROP TABLE IF EXISTS {}", sql::qualified(schema, &companion)));
+    let drop_companion = sql::exec(
+        db,
+        &format!(
+            "DROP TABLE IF EXISTS {}",
+            sql::qualified(schema, &companion)
+        ),
+    );
     ALLOW_DROP.lock().expect("drop set").remove(&key);
     drop_companion?;
     for suffix in ["_vec", "_fts", "_chunk_rows", "_documents", "_model"] {
@@ -301,8 +327,9 @@ unsafe fn connect(
     } else {
         read_model_ok(db, &args.schema, &args.table)?
     };
-    let schema_sql = if args.chunks { CHUNK_SCHEMA } else { DOC_SCHEMA };
-    let c_schema = std::ffi::CString::new(schema_sql).unwrap();
+    let schema_sql = declared_schema(args.chunks, &args.vtab_name);
+    let c_schema =
+        std::ffi::CString::new(schema_sql).map_err(|_| "table name contains a nul".to_string())?;
     let rc = unsafe { sqlite3_declare_vtab(db, c_schema.as_ptr()) };
     if rc != SQLITE_OK {
         return Err(sql::errmsg(db));
@@ -337,6 +364,7 @@ fn read_model_ok(db: *mut sqlite3, schema: &str, table: &str) -> Result<bool, St
 struct Args {
     schema: String,
     table: String,
+    vtab_name: String,
     chunks: bool,
     model: Option<String>,
 }
@@ -350,7 +378,8 @@ fn read_args(argc: c_int, argv: *const *const c_char) -> Result<Args, String> {
         raw.push(unsafe { cstr_at(argv, i) });
     }
     let schema = raw[1].clone();
-    let mut table = raw[2].clone();
+    let vtab_name = raw[2].clone();
+    let mut table = vtab_name.clone();
     let mut chunks = false;
     let mut model = None;
     for arg in raw.iter().skip(3) {
@@ -380,6 +409,7 @@ fn read_args(argc: c_int, argv: *const *const c_char) -> Result<Args, String> {
     Ok(Args {
         schema,
         table,
+        vtab_name,
         chunks,
         model,
     })
@@ -437,12 +467,40 @@ unsafe fn cstr_at(argv: *const *const c_char, index: c_int) -> String {
 
 unsafe extern "C" fn vtab_best_index(
     _vtab: *mut sqlite3_vtab,
-    info: *mut libsqlite3_sys::sqlite3_index_info,
+    info: *mut sqlite3_index_info,
 ) -> c_int {
-    if !info.is_null() {
-        unsafe {
-            (*info).estimatedCost = 1_000_000.0;
+    guard(
+        SQLITE_ERROR,
+        AssertUnwindSafe(|| unsafe { best_index(info) }),
+    )
+}
+
+unsafe fn best_index(info: *mut sqlite3_index_info) -> c_int {
+    if info.is_null() {
+        return SQLITE_ERROR;
+    }
+    let info = unsafe { &mut *info };
+    info.idxNum = IDX_SCAN;
+    info.estimatedCost = 1_000_000.0;
+    if info.nConstraint <= 0 || info.aConstraint.is_null() || info.aConstraintUsage.is_null() {
+        return SQLITE_OK;
+    }
+    let n = info.nConstraint as usize;
+    let constraints = unsafe { std::slice::from_raw_parts(info.aConstraint, n) };
+    let usage = unsafe { std::slice::from_raw_parts_mut(info.aConstraintUsage, n) };
+    for (index, constraint) in constraints.iter().enumerate() {
+        if constraint.usable == 0 {
+            continue;
         }
+        if constraint.op != SQLITE_INDEX_CONSTRAINT_MATCH as u8 {
+            continue;
+        }
+        usage[index].argvIndex = 1;
+        usage[index].omit = 1;
+        info.idxNum = IDX_MATCH;
+        info.estimatedCost = 10.0;
+        info.estimatedRows = FUSION_DEPTH as i64;
+        break;
     }
     SQLITE_OK
 }
@@ -528,18 +586,36 @@ unsafe extern "C" fn vtab_close(cursor: *mut sqlite3_vtab_cursor) -> c_int {
 
 unsafe extern "C" fn vtab_filter(
     cursor: *mut sqlite3_vtab_cursor,
-    _idx_num: c_int,
+    idx_num: c_int,
     _idx_str: *const c_char,
-    _argc: c_int,
-    _argv: *mut *mut sqlite3_value,
+    argc: c_int,
+    argv: *mut *mut sqlite3_value,
 ) -> c_int {
-    guard(SQLITE_ERROR, AssertUnwindSafe(|| unsafe { filter(cursor) }))
+    guard(
+        SQLITE_ERROR,
+        AssertUnwindSafe(|| unsafe { filter(cursor, idx_num, argc, argv) }),
+    )
 }
 
-unsafe fn filter(cursor: *mut sqlite3_vtab_cursor) -> c_int {
+unsafe fn filter(
+    cursor: *mut sqlite3_vtab_cursor,
+    idx_num: c_int,
+    argc: c_int,
+    argv: *mut *mut sqlite3_value,
+) -> c_int {
     let cursor = unsafe { &mut *cursor.cast::<Cursor>() };
     let vtab = unsafe { &*cursor.base.pVtab.cast::<Vtab>() };
-    match load_rows(vtab) {
+    let loaded = if idx_num == IDX_MATCH {
+        let query = if argc > 0 && !argv.is_null() {
+            value_text(unsafe { *argv }).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        search_rows(vtab, &query)
+    } else {
+        load_rows(vtab)
+    };
+    match loaded {
         Ok(rows) => {
             cursor.rows = rows;
             cursor.index = 0;
@@ -574,6 +650,7 @@ fn load_rows(vtab: &Vtab) -> Result<Vec<Row>, String> {
                 heading_path: stmt.column_text(5).unwrap_or_else(|| "[]".to_string()),
                 text: stmt.column_text(6).unwrap_or_default(),
                 meta_json: stmt.column_text(7),
+                score: None,
             });
         }
         Ok(rows)
@@ -591,10 +668,205 @@ fn load_rows(vtab: &Vtab) -> Result<Vec<Row>, String> {
                 source: stmt.column_text(2).unwrap_or_default(),
                 format: stmt.column_text(3).unwrap_or_default(),
                 hash: stmt.column_text(4).unwrap_or_default(),
+                score: None,
             });
         }
         Ok(rows)
     }
+}
+
+fn search_rows(vtab: &Vtab, query: &str) -> Result<Vec<Row>, String> {
+    if query.is_empty() {
+        return Ok(Vec::new());
+    }
+    let model = require_model(vtab)?;
+    let blob = model.embed_blob(query, Role::Query);
+    let depth = FUSION_DEPTH as i64;
+    let vector = vector_ids(vtab, &blob, depth)?;
+    let full_text = fts_ids(vtab, query, depth)?;
+    let fused = reciprocal_rank_fusion(&vector, &full_text);
+    let doc_of = chunk_documents(vtab, &fused)?;
+    let mut chunks = Vec::new();
+    for (chunk_id, score) in fused {
+        let Some(doc_id) = doc_of.get(&chunk_id).copied() else {
+            continue;
+        };
+        chunks.push(FusedChunk {
+            chunk_id,
+            doc_id,
+            score,
+        });
+    }
+    if vtab.chunks {
+        order_fused_chunks(&mut chunks);
+        load_scored_chunks(vtab, &chunks)
+    } else {
+        load_scored_docs(vtab, &best_document_scores(&chunks))
+    }
+}
+
+fn vector_ids(vtab: &Vtab, blob: &[u8], depth: i64) -> Result<Vec<i64>, String> {
+    let vec_name = sql::qualified(&vtab.schema, &format!("{}_vec", vtab.doc_name));
+    let stmt = Stmt::prepare(
+        vtab.db,
+        &format!(
+            "SELECT rowid FROM {vec_name} WHERE embedding MATCH ?1 AND k = ?2 ORDER BY distance"
+        ),
+    )?;
+    stmt.bind_blob(1, blob)?;
+    stmt.bind_i64(2, depth)?;
+    read_ids(&stmt)
+}
+
+fn fts_ids(vtab: &Vtab, query: &str, depth: i64) -> Result<Vec<i64>, String> {
+    let bare = format!("{}_fts", vtab.doc_name);
+    let from = sql::qualified(&vtab.schema, &bare);
+    let name = sql::quote_ident(&bare);
+    let stmt = Stmt::prepare(
+        vtab.db,
+        &format!("SELECT rowid FROM {from} WHERE {name} MATCH ?1 ORDER BY bm25({name}) LIMIT ?2"),
+    )?;
+    stmt.bind_text(1, &fts_phrase(query))?;
+    stmt.bind_i64(2, depth)?;
+    read_ids(&stmt)
+}
+
+/// One FTS5 phrase. Quotes inside the text are doubled so they stay inside it.
+fn fts_phrase(query: &str) -> String {
+    let mut phrase = String::with_capacity(query.len() + 2);
+    phrase.push('"');
+    for ch in query.chars() {
+        if ch == '"' {
+            phrase.push('"');
+        }
+        phrase.push(ch);
+    }
+    phrase.push('"');
+    phrase
+}
+
+fn read_ids(stmt: &Stmt) -> Result<Vec<i64>, String> {
+    let mut ids = Vec::new();
+    while stmt.step()? {
+        ids.push(stmt.column_i64(0));
+    }
+    Ok(ids)
+}
+
+fn chunk_documents(vtab: &Vtab, fused: &[(i64, f64)]) -> Result<HashMap<i64, i64>, String> {
+    if fused.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let list = fused
+        .iter()
+        .map(|(id, _)| id.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let rows = sql::qualified(&vtab.schema, &format!("{}_chunk_rows", vtab.doc_name));
+    let stmt = Stmt::prepare(
+        vtab.db,
+        &format!("SELECT chunk_id, doc_id FROM {rows} WHERE chunk_id IN ({list})"),
+    )?;
+    let mut map = HashMap::new();
+    while stmt.step()? {
+        map.insert(stmt.column_i64(0), stmt.column_i64(1));
+    }
+    Ok(map)
+}
+
+fn load_scored_chunks(vtab: &Vtab, chunks: &[FusedChunk]) -> Result<Vec<Row>, String> {
+    if chunks.is_empty() {
+        return Ok(Vec::new());
+    }
+    let list = chunks
+        .iter()
+        .map(|chunk| chunk.chunk_id.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let rows = sql::qualified(&vtab.schema, &format!("{}_chunk_rows", vtab.doc_name));
+    let docs = sql::qualified(&vtab.schema, &format!("{}_documents", vtab.doc_name));
+    let stmt = Stmt::prepare(
+        vtab.db,
+        &format!(
+            "SELECT c.chunk_id, c.doc_id, d.source, c.start, c.end, c.heading_path, c.text, c.meta_json
+             FROM {rows} c
+             JOIN {docs} d ON d.doc_id = c.doc_id
+             WHERE c.chunk_id IN ({list})"
+        ),
+    )?;
+    let mut by_id = HashMap::new();
+    while stmt.step()? {
+        let chunk_id = stmt.column_i64(0);
+        by_id.insert(
+            chunk_id,
+            Row::Chunk {
+                chunk_id,
+                doc_id: stmt.column_i64(1),
+                source: stmt.column_text(2).unwrap_or_default(),
+                start: stmt.column_i64(3),
+                end: stmt.column_i64(4),
+                heading_path: stmt.column_text(5).unwrap_or_else(|| "[]".to_string()),
+                text: stmt.column_text(6).unwrap_or_default(),
+                meta_json: stmt.column_text(7),
+                score: None,
+            },
+        );
+    }
+    let mut out = Vec::with_capacity(chunks.len());
+    for chunk in chunks {
+        let Some(mut row) = by_id.remove(&chunk.chunk_id) else {
+            continue;
+        };
+        if let Row::Chunk { score, .. } = &mut row {
+            *score = Some(chunk.score);
+        }
+        out.push(row);
+    }
+    Ok(out)
+}
+
+fn load_scored_docs(vtab: &Vtab, docs: &[(i64, f64)]) -> Result<Vec<Row>, String> {
+    if docs.is_empty() {
+        return Ok(Vec::new());
+    }
+    let list = docs
+        .iter()
+        .map(|(id, _)| id.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let documents = sql::qualified(&vtab.schema, &format!("{}_documents", vtab.doc_name));
+    let stmt = Stmt::prepare(
+        vtab.db,
+        &format!(
+            "SELECT doc_id, text, source, format, hash FROM {documents} WHERE doc_id IN ({list})"
+        ),
+    )?;
+    let mut by_id = HashMap::new();
+    while stmt.step()? {
+        let doc_id = stmt.column_i64(0);
+        by_id.insert(
+            doc_id,
+            Row::Doc {
+                doc_id,
+                text: stmt.column_text(1).unwrap_or_default(),
+                source: stmt.column_text(2).unwrap_or_default(),
+                format: stmt.column_text(3).unwrap_or_default(),
+                hash: stmt.column_text(4).unwrap_or_default(),
+                score: None,
+            },
+        );
+    }
+    let mut out = Vec::with_capacity(docs.len());
+    for (doc_id, score) in docs {
+        let Some(mut row) = by_id.remove(doc_id) else {
+            continue;
+        };
+        if let Row::Doc { score: slot, .. } = &mut row {
+            *slot = Some(*score);
+        }
+        out.push(row);
+    }
+    Ok(out)
 }
 
 unsafe extern "C" fn vtab_next(cursor: *mut sqlite3_vtab_cursor) -> c_int {
@@ -624,14 +896,15 @@ unsafe extern "C" fn vtab_column(
             source,
             format,
             hash,
+            score,
         } => match col {
             COL_DOC_ID => result_i64(ctx, *doc_id),
             COL_TEXT => result_text(ctx, text),
             COL_SOURCE => result_text(ctx, source),
             COL_FORMAT => result_text(ctx, format),
             COL_HASH => result_text(ctx, hash),
-            COL_SCORE => result_null(ctx),
-            _ => SQLITE_ERROR,
+            COL_SCORE => result_score(ctx, *score),
+            _ => result_null(ctx),
         },
         Row::Chunk {
             doc_id,
@@ -641,6 +914,7 @@ unsafe extern "C" fn vtab_column(
             heading_path,
             text,
             meta_json,
+            score,
             ..
         } => match col {
             COL_CHUNK => result_text(ctx, text),
@@ -656,8 +930,8 @@ unsafe extern "C" fn vtab_column(
                     result_null(ctx)
                 }
             }
-            COL_C_SCORE => result_null(ctx),
-            _ => SQLITE_ERROR,
+            COL_C_SCORE => result_score(ctx, *score),
+            _ => result_null(ctx),
         },
     }
 }
@@ -686,6 +960,18 @@ fn result_i64(ctx: *mut libsqlite3_sys::sqlite3_context, value: i64) -> c_int {
     SQLITE_OK
 }
 
+fn result_f64(ctx: *mut libsqlite3_sys::sqlite3_context, value: f64) -> c_int {
+    unsafe { libsqlite3_sys::sqlite3_result_double(ctx, value) };
+    SQLITE_OK
+}
+
+fn result_score(ctx: *mut libsqlite3_sys::sqlite3_context, score: Option<f64>) -> c_int {
+    match score {
+        Some(value) => result_f64(ctx, value),
+        None => result_null(ctx),
+    }
+}
+
 fn result_text(ctx: *mut libsqlite3_sys::sqlite3_context, value: &str) -> c_int {
     unsafe {
         libsqlite3_sys::sqlite3_result_text(
@@ -704,15 +990,18 @@ unsafe extern "C" fn vtab_update(
     argv: *mut *mut sqlite3_value,
     p_rowid: *mut i64,
 ) -> c_int {
-    guard(SQLITE_ERROR, AssertUnwindSafe(|| unsafe {
-        match update(vtab, argc, argv, p_rowid) {
-            Ok(()) => SQLITE_OK,
-            Err(err) => {
-                set_vtab_error(vtab, &err);
-                SQLITE_ERROR
+    guard(
+        SQLITE_ERROR,
+        AssertUnwindSafe(|| unsafe {
+            match update(vtab, argc, argv, p_rowid) {
+                Ok(()) => SQLITE_OK,
+                Err(err) => {
+                    set_vtab_error(vtab, &err);
+                    SQLITE_ERROR
+                }
             }
-        }
-    }))
+        }),
+    )
 }
 
 unsafe fn update(
@@ -729,11 +1018,12 @@ unsafe fn update(
         ));
     }
     if argc == 1 {
-        let rowid = value_i64(unsafe { *argv }).ok_or_else(|| "delete is missing a rowid".to_string())?;
+        let rowid =
+            value_i64(unsafe { *argv }).ok_or_else(|| "delete is missing a rowid".to_string())?;
         delete_document(table, rowid)?;
         return Ok(());
     }
-    if argc != 8 {
+    if argc != 9 {
         return Err("write has the wrong number of columns".to_string());
     }
     let old_rowid = value_i64(unsafe { *argv });
@@ -890,7 +1180,10 @@ fn insert_chunk(
 fn delete_document(table: &Vtab, doc_id: i64) -> Result<(), String> {
     delete_chunks(table, doc_id)?;
     let documents = sql::qualified(&table.schema, &format!("{}_documents", table.doc_name));
-    let stmt = Stmt::prepare(table.db, &format!("DELETE FROM {documents} WHERE doc_id = ?1"))?;
+    let stmt = Stmt::prepare(
+        table.db,
+        &format!("DELETE FROM {documents} WHERE doc_id = ?1"),
+    )?;
     stmt.bind_i64(1, doc_id)?;
     stmt.step()?;
     Ok(())
@@ -898,7 +1191,10 @@ fn delete_document(table: &Vtab, doc_id: i64) -> Result<(), String> {
 
 fn delete_chunks(table: &Vtab, doc_id: i64) -> Result<(), String> {
     let rows = sql::qualified(&table.schema, &format!("{}_chunk_rows", table.doc_name));
-    let stmt = Stmt::prepare(table.db, &format!("SELECT chunk_id FROM {rows} WHERE doc_id = ?1"))?;
+    let stmt = Stmt::prepare(
+        table.db,
+        &format!("SELECT chunk_id FROM {rows} WHERE doc_id = ?1"),
+    )?;
     stmt.bind_i64(1, doc_id)?;
     let mut ids = Vec::new();
     while stmt.step()? {
@@ -947,7 +1243,9 @@ fn update_document(
     }
     let stmt = Stmt::prepare(
         table.db,
-        &format!("UPDATE {documents} SET source = ?1, text = ?2, format = ?3, hash = ?4 WHERE doc_id = ?5"),
+        &format!(
+            "UPDATE {documents} SET source = ?1, text = ?2, format = ?3, hash = ?4 WHERE doc_id = ?5"
+        ),
     )?;
     stmt.bind_text(1, source)?;
     stmt.bind_text(2, text)?;

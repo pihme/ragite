@@ -1,0 +1,1 @@
+{"schema_name":"DoclingDocument","texts":[{"self_ref":"#/texts/0","label":"title","text":"Title"},{"self_ref":"#/texts/1","label":"text","text":"Body"}],"body":{"children":[{"$ref":"#/texts/0"},{"$ref":"#/texts/1"}]}}

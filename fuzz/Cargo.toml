@@ -1,0 +1,43 @@
+[package]
+name = "ragite-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.88"
+description = "libFuzzer targets for the ragite chunkers. Not shipped."
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+ragite-core = { path = "../crates/ragite-core", default-features = false, features = ["fuzz-invariants"] }
+
+[[bin]]
+name = "html"
+path = "fuzz_targets/html.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "markdown"
+path = "fuzz_targets/markdown.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "docling"
+path = "fuzz_targets/docling.rs"
+test = false
+doc = false
+bench = false
+
+[profile.release]
+debug = 1
+
+# Own workspace, so `cargo test --workspace` does not build libFuzzer.
+[workspace]
+members = ["."]

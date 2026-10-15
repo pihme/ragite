@@ -1,0 +1,1 @@
+{"schema_name":"DoclingDocument","key_value_items":[{"self_ref":"#/key_value_items/0","graph":{"cells":[{"cell_id":0,"label":"key","text":"role"},{"cell_id":1,"label":"value","text":"admin"}],"links":[{"label":"to_value","source_cell_id":0,"target_cell_id":1}]}}],"body":{"children":[{"$ref":"#/key_value_items/0"}]}}

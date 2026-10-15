@@ -32,4 +32,8 @@ Python 3, Node.js, and Go must be on `PATH`. The Python test uses the standard-l
 
 Test cases are numbered in [TESTSPEC.md](TESTSPEC.md). Cite those numbers from the tests.
 
+## Fuzzing
+
+Fuzzing is optional and is not part of `make test`. The targets, the seed corpus, and how to run them locally or from the manual Fuzz workflow are in [fuzz/README.md](fuzz/README.md).
+
 Mutation tests are not part of `make test`. The manual GitHub Actions workflow `Mutation` runs `cargo mutants` 27.1.0 on `ragite-core`. It does not run on push or pull request. Outcomes are uploaded as a workflow artifact.

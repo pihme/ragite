@@ -7,6 +7,11 @@ mod html;
 mod markdown;
 mod model;
 
+#[cfg(any(test, feature = "fuzz-invariants"))]
+mod invariants;
+#[cfg(any(test, feature = "fuzz-invariants"))]
+pub use invariants::{check_docling, check_html, check_markdown, check_plain};
+
 pub use chunk::{Chunk, chunk_html, chunk_markdown, chunk_plain};
 pub use docling::chunk_docling;
 pub use fusion::{FusedChunk, best_document_scores, order_fused_chunks, reciprocal_rank_fusion};

@@ -1,0 +1,68 @@
+name: Fuzz
+
+# Manual libFuzzer run for the chunkers (REQ-95). Not on push or pull request.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Fuzz target"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - html
+          - markdown
+          - docling
+      duration:
+        description: "Seconds to run each target"
+        required: true
+        default: 600
+        type: number
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked --version 0.13.2
+
+      - name: Fuzz
+        run: |
+          set -euo pipefail
+          duration="${{ inputs.duration }}"
+          if [ "$duration" -lt 1 ]; then
+            echo "duration must be at least 1 second"
+            exit 1
+          fi
+          if [ "${{ inputs.target }}" = all ]; then
+            targets="html markdown docling"
+          else
+            targets="${{ inputs.target }}"
+          fi
+          for target in $targets; do
+            cargo fuzz run "$target" -- -max_total_time="$duration" -rss_limit_mb=2048 -timeout=10
+          done
+
+      - name: Upload crashes and corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-${{ github.run_id }}
+          if-no-files-found: ignore
+          path: |
+            fuzz/artifacts
+            fuzz/corpus

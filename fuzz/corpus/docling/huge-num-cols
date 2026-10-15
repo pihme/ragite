@@ -1,0 +1,1 @@
+{"schema_name":"DoclingDocument","tables":[{"self_ref":"#/tables/0","data":{"num_rows":3,"num_cols":1000000000000000001,"table_cells":[{"text":"A"}]}}],"body":{"children":[{"$ref":"#/tables/0"}]}}

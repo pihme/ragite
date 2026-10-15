@@ -2,6 +2,7 @@
 
 mod chunk;
 mod fusion;
+mod html;
 mod markdown;
 mod model;
 

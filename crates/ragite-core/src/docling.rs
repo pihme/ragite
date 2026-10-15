@@ -1,6 +1,6 @@
 //! Cut a DoclingDocument JSON object into Chunks.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde_json::Value;
 
@@ -37,17 +37,26 @@ fn schema_value(value: &Value) -> String {
 fn walk(root: &Value) -> Vec<Chunk> {
     let mut chunks = Vec::new();
     let mut seen = HashSet::new();
+    let mut headings = BTreeMap::new();
     // Body is walked before furniture. A ref reached twice is emitted once.
-    walk_ref(root, "#/body", &[], false, &mut seen, &mut chunks);
-    walk_ref(root, "#/furniture", &[], true, &mut seen, &mut chunks);
+    walk_ref(root, "#/body", false, &mut headings, &mut seen, &mut chunks);
+    let mut furniture_headings = BTreeMap::new();
+    walk_ref(
+        root,
+        "#/furniture",
+        true,
+        &mut furniture_headings,
+        &mut seen,
+        &mut chunks,
+    );
     chunks
 }
 
 fn walk_ref(
     root: &Value,
     cref: &str,
-    path: &[String],
     furniture: bool,
+    headings: &mut BTreeMap<i64, String>,
     seen: &mut HashSet<String>,
     chunks: &mut Vec<Chunk>,
 ) {
@@ -57,15 +66,51 @@ fn walk_ref(
     let Some(node) = resolve(root, cref) else {
         return;
     };
+    let path = heading_path_for(cref, node, furniture, headings);
     if let Some(text) = item_text(cref, node) {
         if !text.is_empty() {
-            let meta = meta_for(node, cref, path, furniture);
-            push_pieces(chunks, &text, path, &meta);
+            let meta = meta_for(node, cref, &path, furniture);
+            push_pieces(chunks, &text, &path, &meta);
         }
     }
-    let child_path = extend_path(cref, node, path, furniture);
     for child in child_refs(node) {
-        walk_ref(root, &child, &child_path, furniture, seen, chunks);
+        walk_ref(root, &child, furniture, headings, seen, chunks);
+    }
+}
+
+/// Titles are level 0. A section header uses its `level`, or 1 when that
+/// field is absent. A heading applies until a later heading of the same
+/// level or a level above it (a smaller or equal level number).
+fn heading_path_for(
+    cref: &str,
+    node: &Value,
+    furniture: bool,
+    headings: &mut BTreeMap<i64, String>,
+) -> Vec<String> {
+    if furniture {
+        return Vec::new();
+    }
+    let Some(level) = heading_level(cref, node) else {
+        return headings.values().cloned().collect();
+    };
+    headings.retain(|key, _| *key < level);
+    let path = headings.values().cloned().collect();
+    if let Some(title) = node.get("text").and_then(Value::as_str)
+        && !title.is_empty()
+    {
+        headings.insert(level, title.to_string());
+    }
+    path
+}
+
+fn heading_level(cref: &str, node: &Value) -> Option<i64> {
+    if collection(cref) != Some("texts") {
+        return None;
+    }
+    match node.get("label").and_then(Value::as_str) {
+        Some("title") => Some(0),
+        Some("section_header") => Some(node.get("level").and_then(json_i64).unwrap_or(1)),
+        _ => None,
     }
 }
 
@@ -81,24 +126,6 @@ fn item_text(cref: &str, node: &Value) -> Option<String> {
         Some("key_value_items") => Some(kv_text(node)),
         _ => None,
     }
-}
-
-fn extend_path(cref: &str, node: &Value, path: &[String], furniture: bool) -> Vec<String> {
-    if furniture {
-        return Vec::new();
-    }
-    let mut next = path.to_vec();
-    if collection(cref) == Some("texts")
-        && matches!(
-            node.get("label").and_then(Value::as_str),
-            Some("title" | "section_header")
-        )
-        && let Some(text) = node.get("text").and_then(Value::as_str)
-        && !text.is_empty()
-    {
-        next.push(text.to_string());
-    }
-    next
 }
 
 fn push_pieces(chunks: &mut Vec<Chunk>, text: &str, path: &[String], meta: &str) {
@@ -628,9 +655,17 @@ mod tests {
         assert_eq!(chunks[1].heading_path, vec!["Sec".to_string()]);
         assert_eq!(chunks[2].heading_path, vec!["Sec".to_string()]);
         assert_eq!(chunks[5].heading_path, vec!["Sec".to_string()]);
+        assert_eq!(
+            chunks[6].heading_path,
+            vec!["Sec".to_string()],
+            "a page header follows the headings still open"
+        );
         assert!(
-            chunks[6].heading_path.is_empty(),
-            "page header is kept and is not a section"
+            chunks[6]
+                .meta_json
+                .as_deref()
+                .unwrap()
+                .contains(r#""section":"Sec""#)
         );
         for chunk in &chunks[7..] {
             assert!(chunk.heading_path.is_empty(), "{}", chunk.text);
@@ -830,6 +865,73 @@ mod tests {
                 .as_deref()
                 .unwrap()
                 .contains(r#""section":null"#)
+        );
+    }
+
+    #[test]
+    fn tc_241_sibling_headers_fill_the_items_that_follow() {
+        let doc = serde_json::json!({
+            "schema_name": "DoclingDocument",
+            "texts": [
+                {"self_ref": "#/texts/0", "label": "title", "text": "Paper", "children": []},
+                {"self_ref": "#/texts/1", "label": "section_header", "text": "ABSTRACT", "level": 1, "children": []},
+                {"self_ref": "#/texts/2", "label": "text", "text": "Summary", "children": []},
+                {"self_ref": "#/texts/3", "label": "section_header", "text": "Intro", "level": 1, "children": [
+                    {"$ref": "#/texts/4"}
+                ]},
+                {"self_ref": "#/texts/4", "label": "text", "text": "Nested", "children": []},
+                {"self_ref": "#/texts/5", "label": "text", "text": "After", "children": []},
+                {"self_ref": "#/texts/6", "label": "section_header", "text": "Background", "level": 2, "children": []},
+                {"self_ref": "#/texts/7", "label": "text", "text": "Earlier", "children": []},
+                {"self_ref": "#/texts/8", "label": "section_header", "text": "Methods", "level": 1, "children": []},
+                {"self_ref": "#/texts/9", "label": "text", "text": "Done", "children": []},
+                {"self_ref": "#/texts/10", "label": "section_header", "text": "Plain", "children": []},
+                {"self_ref": "#/texts/11", "label": "text", "text": "UnderPlain", "children": []}
+            ],
+            "body": {"children": [
+                {"$ref": "#/texts/0"},
+                {"$ref": "#/texts/1"},
+                {"$ref": "#/texts/2"},
+                {"$ref": "#/texts/3"},
+                {"$ref": "#/texts/5"},
+                {"$ref": "#/texts/6"},
+                {"$ref": "#/texts/7"},
+                {"$ref": "#/texts/8"},
+                {"$ref": "#/texts/9"},
+                {"$ref": "#/texts/10"},
+                {"$ref": "#/texts/11"}
+            ]}
+        });
+        let chunks = cut(&doc.to_string());
+        let paths: Vec<(&str, Vec<&str>)> = chunks
+            .iter()
+            .map(|chunk| {
+                (
+                    chunk.text.as_str(),
+                    chunk.heading_path.iter().map(String::as_str).collect(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            paths,
+            vec![
+                ("Paper", vec![]),
+                ("ABSTRACT", vec!["Paper"]),
+                ("Summary", vec!["Paper", "ABSTRACT"]),
+                ("Intro", vec!["Paper"]),
+                ("Nested", vec!["Paper", "Intro"]),
+                ("After", vec!["Paper", "Intro"]),
+                ("Background", vec!["Paper", "Intro"]),
+                ("Earlier", vec!["Paper", "Intro", "Background"]),
+                ("Methods", vec!["Paper"]),
+                ("Done", vec!["Paper", "Methods"]),
+                ("Plain", vec!["Paper"]),
+                ("UnderPlain", vec!["Paper", "Plain"]),
+            ]
+        );
+        assert_eq!(
+            chunks[2].meta_json.as_deref(),
+            Some(r##"{"page":null,"section":"ABSTRACT","element":"#/texts/2"}"##)
         );
     }
 }

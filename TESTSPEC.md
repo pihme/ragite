@@ -2,7 +2,7 @@
 
 Status: draft, pre-1.0. Nothing here is implemented yet. Cases carry stable IDs (`TC-n`). Future tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-241.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-245.
 
 ## Conventions
 
@@ -244,6 +244,8 @@ Unless a case says otherwise:
 ## REQ-40
 
 - **TC-109** `DROP TABLE docs_chunks` fails. `docs` and `docs_chunks` both still accept `SELECT`.
+- **TC-242** `ALTER TABLE docs RENAME TO docs9` fails with `rename is not accepted`. `docs` still returns the inserted text, no `docs9` table exists, and `DROP TABLE docs` removes the table. `ALTER TABLE docs_chunks RENAME` fails the same way, and `docs_chunks` still reads.
+- **TC-243** `CREATE VIRTUAL TABLE evil USING ragite(companion=1, parent=docs)` fails with `argument is not accepted: companion` and leaves no `evil` table. `CREATE VIRTUAL TABLE other USING ragite(parent=docs)` fails with `argument is not accepted: parent`. The companion ragite created for `docs` still reads after that database is opened again.
 
 ## REQ-41
 
@@ -297,7 +299,8 @@ Unless a case says otherwise:
 ## REQ-49
 
 - **TC-135** A body text item, a table, a picture's caption text item, and a key-value item each produce Chunks. The same four kinds produce Chunks when they sit in furniture.
-- **TC-136** A title item and a section-header item produce Chunks. Their text is the heading path of the body Chunks under them. An item is kept when its label is a header, and when it belongs to furniture.
+- **TC-136** A title item and a section-header item produce Chunks. Their text is the heading path of the body Chunks that follow them in reading order, until a later heading of the same level or a level above. An item is kept when its label is a header, and when it belongs to furniture.
+- **TC-241** Sibling headings in the body, with empty `children`, still fill `heading_path` and `meta_json` `section` for the items that follow. A title is above a level-1 section header. A level-1 header ends a previous level-1 header and keeps the title. A level-2 header sits under the open level-1 header. A missing `level` is level 1. A heading Chunk's own path lists only the headings above it. A nested child of a heading and the next sibling after that heading see the same path.
 - **TC-137** An item with no characters produces no Chunk, on either tree.
 
 ## REQ-50
@@ -414,6 +417,7 @@ Unless a case says otherwise:
 - **TC-194** `ragite_table_model('docs')` returns the technical identifier stored at `CREATE`.
 - **TC-195** It still returns that identifier when the loaded extension cannot load that Model.
 - **TC-196** `ragite_table_model('docs_chunks')` and `ragite_table_model('missing')` fail, and the error includes that name.
+- **TC-244** After `CREATE VIRTUAL TABLE Mixed USING ragite`, `ragite_table_model('mixed')` and `ragite_embed('mixed', ...)` use that table. `MAIN.Mixed` matches it as well. The returned technical identifier is the one stored for `Mixed`.
 
 ## REQ-68
 
@@ -519,4 +523,4 @@ Unless a case says otherwise:
 
 ## REQ-88
 
-- **TC-241** For every sentence in `tests/parity/reference.json`, `ragite_embed_model` with the default Model and role `passage` returns a vector of the same dimension whose cosine with the reference vector is at least 0.99. The file's `model` equals the default technical identifier.
+- **TC-245** For every sentence in `tests/parity/reference.json`, `ragite_embed_model` with the default Model and role `passage` returns a vector of the same dimension whose cosine with the reference vector is at least 0.99. The file's `model` equals the default technical identifier.

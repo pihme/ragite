@@ -50,6 +50,54 @@ jobs:
       - name: Test
         run: make test
 
+  # Coverage report only; there is no threshold and it never gates a merge.
+  coverage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Install SQLite
+        run: sudo apt-get update && sudo apt-get install -y sqlite3 libsqlite3-0
+
+      - name: Measure coverage
+        # The integration tests load target/debug/libragite.so through sqlite3,
+        # so build the instrumented extension first, then run the tests.
+        run: |
+          source <(cargo llvm-cov show-env --export-prefix)
+          cargo llvm-cov clean --workspace
+          # The license test runs `cargo metadata --offline` (see Makefile).
+          cargo fetch --locked
+          env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
+            cargo build -p ragite-sqlite
+          env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
+            cargo test --workspace
+          cargo llvm-cov report --lcov --output-path lcov.info
+          {
+            echo '## Rust coverage'
+            echo
+            echo '```'
+            cargo llvm-cov report --summary-only
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: lcov
+          path: lcov.info
+
   # Open or update the release pull request after tests pass on main.
   release-plz-pr:
     needs: test

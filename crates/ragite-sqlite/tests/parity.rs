@@ -32,7 +32,7 @@ fn cosine(a: &[f32], b: &[f64]) -> f64 {
 }
 
 #[test]
-fn tc_241_builtin_model_matches_reference_vectors() {
+fn tc_245_builtin_model_matches_reference_vectors() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/parity/reference.json");
     let reference: Value =
         serde_json::from_str(&std::fs::read_to_string(&path).expect("reference.json")).unwrap();

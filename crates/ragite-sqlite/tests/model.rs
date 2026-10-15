@@ -424,3 +424,20 @@ fn tc_61_copy_assigns_new_document_ids_and_drop_removes_shadows() {
         assert!(names.iter().any(|name| name == kept), "{names:?}");
     }
 }
+
+#[test]
+fn tc_244_table_name_matches_without_ascii_case() {
+    let rows = ok(
+        "CREATE VIRTUAL TABLE Mixed USING ragite;
+         INSERT INTO Mixed(text) VALUES ('hello');
+         SELECT ragite_table_model('mixed') AS stored,
+                ragite_table_model('MIXED') AS upper_name,
+                (SELECT technical_id FROM ragite_default_model()) AS builtin;
+         SELECT length(ragite_embed('mixed', 'hello', 'query')) AS n;
+         SELECT length(ragite_embed('MAIN.Mixed', 'hello', 'passage')) AS n;",
+    );
+    assert_eq!(cell(&rows, 0, "stored"), cell(&rows, 0, "builtin"));
+    assert_eq!(cell(&rows, 0, "upper_name"), cell(&rows, 0, "builtin"));
+    assert_eq!(cell(&rows, 1, "n"), (DIMENSION * 4).to_string());
+    assert_eq!(cell(&rows, 2, "n"), (DIMENSION * 4).to_string());
+}

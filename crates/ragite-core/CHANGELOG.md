@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/pihme/ragite/compare/ragite-core/v0.2.0...ragite-core/v0.3.0) - 2026-10-16
+
+### Added
+
+- [**breaking**] default Model potion-retrieval-32M is breaking; tokenizers in LFS ([#34](https://github.com/pihme/ragite/pull/34))
+
+### Fixed
+
+- bound a Docling table by its cells ([#25](https://github.com/pihme/ragite/pull/25))
+- assemble the model weights on macOS and Windows ([#38](https://github.com/pihme/ragite/pull/38))
+
+### Other
+
+- lock the non-equivalent mutation survivors ([#33](https://github.com/pihme/ragite/pull/33))
+
 ## [0.2.0](https://github.com/pihme/ragite/compare/ragite-core/v0.1.1...ragite-core/v0.2.0) - 2026-10-15
 
 ### Added

@@ -67,6 +67,7 @@ Unless a case says otherwise:
 
 - **TC-18** `BEGIN`, `INSERT`, `ROLLBACK` leaves no Document, Chunk, vector, or FTS row from that statement.
 - **TC-19** `BEGIN`, an `UPDATE` that changes text, `ROLLBACK` restores the previous Chunks, vectors, and FTS rows.
+- **TC-268** After a rolled-back `INSERT`, `MATCH` on `docs_chunks` does not return the rolled-back Chunk and `docs_fts` has no hit for its text. After a rolled-back `UPDATE`, `MATCH` returns the old text and `docs_fts` has no hit for the new text. After a rolled-back `DELETE`, `MATCH` on `docs` returns the Document again with a Score.
 
 ## REQ-12
 
@@ -446,6 +447,7 @@ Unless a case says otherwise:
 
 - **TC-203** `TEXT/MARKDOWN`, `Text/Html`, and `APPLICATION/VND.DOCLING.DOCUMENT+JSON` are accepted and stored as the canonical lowercase types.
 - **TC-204** `text/plain; charset=utf-8` fails, and the error includes that format string.
+- **TC-269** A parameter fails for every accepted type, on `INSERT` and on `UPDATE`: `text/markdown; charset=utf-8`, `TEXT/HTML;charset=UTF-8`, and `application/vnd.docling.document+json; version=1`. The `INSERT` error includes the format string. A failed `UPDATE` leaves the stored format and Chunks unchanged.
 
 ## REQ-73
 
@@ -569,3 +571,8 @@ Unless a case says otherwise:
 ## REQ-97
 
 - **TC-266** A table with `num_rows` 3 and a `num_cols` that does not fit in a grid produces one Chunk, `A` followed by two empty rows, and does not panic. A table declared as 200000 by 200000 with one cell, and a single cell positioned at row 200000 and column 200000, each produce one Chunk, `A`. A 2 by 2 table with cells only at the two corners is still `A`, a tab, a newline, a tab, and `D`.
+
+## Documentation and setup
+
+- **TC-267** The SQL block under *Quickstart* in `README.md` runs unchanged in the `sqlite3` shell started in the directory of the built extension, including `load_extension('./libragite')`. The default Model row it prints matches the technical id named in the README, the Document row has Source `manual.md`, and `MATCH` returns at least one Chunk with a Score.
+- **TC-270** On a fresh checkout with Git LFS, the commands in CONTRIBUTING.md (`cargo fetch --locked`, `cargo build -p ragite-sqlite`, `cargo test --workspace`) pass without the Makefile. CI job `fresh-checkout` runs exactly those commands.

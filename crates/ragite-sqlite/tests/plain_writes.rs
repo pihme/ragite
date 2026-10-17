@@ -423,3 +423,67 @@ fn tc_231_tc_232_rollback_returns_ids_to_sqlite() {
     assert_eq!(cell(&rows, 0, "doc_id"), "1");
     assert_eq!(cell(&rows, 0, "text"), "after");
 }
+
+#[test]
+fn tc_268_rollback_is_visible_to_match() {
+    let out = common::sql(
+        "CREATE VIRTUAL TABLE docs USING ragite;
+         INSERT INTO docs(text, source) VALUES ('hello world', 'a');
+         BEGIN;
+         INSERT INTO docs(text, source) VALUES ('zebra stripes', 'b');
+         ROLLBACK;
+         SELECT 'insert' AS step, count(*) AS n FROM docs_chunks WHERE docs_chunks MATCH 'zebra stripes';
+         SELECT 'insert_fts' AS step, count(*) AS n FROM docs_fts WHERE docs_fts MATCH '\"zebra stripes\"';
+         BEGIN;
+         UPDATE docs SET text = 'zebra stripes' WHERE doc_id = 1;
+         ROLLBACK;
+         SELECT 'update' AS step, text, source FROM docs_chunks WHERE docs_chunks MATCH 'hello world';
+         SELECT 'update_fts' AS step, count(*) AS n FROM docs_fts WHERE docs_fts MATCH '\"zebra stripes\"';
+         BEGIN;
+         DELETE FROM docs WHERE doc_id = 1;
+         ROLLBACK;
+         SELECT 'delete' AS step, doc_id, score FROM docs WHERE docs MATCH 'hello world';",
+    );
+    assert!(out.status, "{}{}", out.stderr, out.stdout);
+    let rows = common::parse_json(&out.stdout);
+    let rows = rows.as_array().unwrap();
+    let step = |name: &str| -> Vec<&serde_json::Value> {
+        rows.iter().filter(|r| r["step"] == name).collect()
+    };
+    // Only the committed Document is left to rank; the rolled-back one is gone.
+    assert_eq!(step("insert")[0]["n"], 1);
+    assert_eq!(step("insert_fts")[0]["n"], 0);
+    let update = step("update");
+    assert_eq!(update.len(), 1);
+    assert_eq!(update[0]["text"], "hello world");
+    assert_eq!(step("update_fts")[0]["n"], 0);
+    let delete = step("delete");
+    assert_eq!(delete.len(), 1);
+    assert_eq!(delete[0]["doc_id"], 1);
+    assert!(delete[0]["score"].is_number());
+}
+
+#[test]
+fn tc_269_format_with_a_parameter_fails_for_every_type() {
+    for format in [
+        "text/markdown; charset=utf-8",
+        "TEXT/HTML;charset=UTF-8",
+        "application/vnd.docling.document+json; version=1",
+    ] {
+        let message = common::err(&format!(
+            "CREATE VIRTUAL TABLE docs USING ragite;
+             INSERT INTO docs(text, format) VALUES ('# m', '{format}');"
+        ));
+        assert!(message.contains(format), "{format}: {message}");
+        let out = common::sql(&format!(
+            "CREATE VIRTUAL TABLE docs USING ragite;
+             INSERT INTO docs(text, format) VALUES ('# m', 'text/markdown');
+             UPDATE docs SET format = '{format}' WHERE doc_id = 1;
+             SELECT format, (SELECT count(*) FROM docs_chunk_rows) AS chunks FROM docs;"
+        ));
+        assert!(!out.status, "{format}: UPDATE was accepted");
+        let rows = common::parse_json(&out.stdout);
+        assert_eq!(common::cell(&rows, 0, "format"), "text/markdown", "{format}");
+        assert_eq!(common::cell(&rows, 0, "chunks"), "1", "{format}");
+    }
+}

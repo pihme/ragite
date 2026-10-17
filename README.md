@@ -8,16 +8,26 @@ Website: https://pihme.github.io/ragite/
 
 ragite is an embeddable retrieval component for retrieval-augmented generation (RAG). It splits text into chunks, computes embeddings on the CPU and finds the best-matching passages with a hybrid search (vector similarity plus full-text BM25), always with a link back to the source document and position. It ships as a loadable SQLite extension, so any application in any language that can load SQLite extensions can use it: SQLite for RAG.
 
+## Quickstart
+
+Download `libragite.so` from the [latest release](https://github.com/pihme/ragite/releases/latest) (Linux x86-64), or build it with `cargo build -p ragite-sqlite --release` (see [CONTRIBUTING.md](CONTRIBUTING.md)). Start `sqlite3` in the directory that holds the file:
+
 ```sql
-SELECT load_extension('ragite');
-CREATE VIRTUAL TABLE docs USING ragite(model='<technical_id>');
+SELECT load_extension('./libragite');
+SELECT name, technical_id FROM ragite_default_model();
+CREATE VIRTUAL TABLE docs USING ragite;
 INSERT INTO docs(text, source, format)
-VALUES ('# Installation ...', 'manual.md', 'text/markdown');
+VALUES ('# Installation
+
+Run the installer and restart the application.', 'manual.md', 'text/markdown');
 SELECT text, source FROM docs WHERE source = 'manual.md';
-SELECT chunk, source, score FROM docs_chunks WHERE docs_chunks MATCH 'How do I install it?' LIMIT 5;
+SELECT text, source, score FROM docs_chunks WHERE docs_chunks MATCH 'How do I install it?' LIMIT 5;
 ```
 
-(Planned interface; nothing is implemented yet.)
+This block is run as a test (`crates/ragite-sqlite/tests/readme.rs`), so it stays correct.
+
+- **Loading.** SQLite looks for the exact name you pass and then for that name plus the platform suffix, so pass a path without the suffix: `load_extension('./libragite')` in SQL, `.load ./libragite` in the `sqlite3` shell. `load_extension('ragite')` does not work: the file is called `libragite.so`, and a bare name is looked up on the library search path, not in the current directory. The file name per platform is `libragite.so` (Linux), `libragite.dylib` (macOS), and `ragite.dll` (Windows, so `load_extension('./ragite')` there). Release binaries are published for Linux only so far. Your SQLite must allow extension loading (in Python: `conn.enable_load_extension(True)`; the macOS system `sqlite3` cannot load extensions, use Homebrew SQLite).
+- **Model.** `model` may be omitted in `CREATE VIRTUAL TABLE`; the table then uses the built-in default Model. In this build that is potion-retrieval-32M, technical id `potion-retrieval-32M@6fc8051fab2a1e0ee76689cf08c853792ac285e7`, as `ragite_default_model()` reports. To pin it, write `USING ragite(model='potion-retrieval-32M@6fc8051fab2a1e0ee76689cf08c853792ac285e7')`.
 
 ## Goal
 
@@ -38,7 +48,7 @@ If you want different presets, fork the repository and change the requirements.
 
 See [ROADMAP.md](ROADMAP.md) for what versions 1.0 and 2.0 will deliver.
 
-Pre-1.0. The design lives in [SPEC.md](SPEC.md). Version 1 uses potion-retrieval-32M (512 dimensions; the extension is ~131 MB because the weights are embedded), chunks of at most 512 Unicode scalars with an overlap of 64, and takes 50 chunks from each ranking.
+Pre-1.0; the current release is v0.3.0, and the interface above works. The design lives in [SPEC.md](SPEC.md). Version 1 uses potion-retrieval-32M (512 dimensions; the release `libragite.so` is about 135 MB (129 MiB) because the weights are embedded), chunks of at most 512 Unicode scalars with an overlap of 64, and takes 50 chunks from each ranking.
 
 ## Benchmark
 

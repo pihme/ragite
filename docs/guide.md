@@ -32,7 +32,7 @@ SELECT name, technical_id FROM ragite_default_model();
 - `<name>`, the **document table**: one row per document, with the columns `doc_id`, `text`, `source`, `format`, `hash`, and `score`. You write here.
 - `<name>_chunks`, the **chunk table**: read-only, one row per chunk, with the columns `chunk`, `doc_id`, `source`, `start`, `end`, `heading_path`, `meta_json`, and `score`.
 
-It also creates internal tables named `<name>_documents`, `<name>_chunk_rows`, `<name>_vec`, and `<name>_fts`. They are an implementation detail: do not query or write them directly, and do not rely on their names or columns. The table uses the build's default model unless you pass `model` (see [section 6](#6-models)).
+It also creates internal tables, such as `<name>_documents`, `<name>_chunk_rows`, `<name>_vec`, and `<name>_fts`. They are an implementation detail: do not query or write them directly, and do not rely on their names or columns. The table uses the build's default model unless you pass `model` (see [section 6](#6-models)).
 
 ```sql
 CREATE VIRTUAL TABLE docs USING ragite;
@@ -261,6 +261,7 @@ INSERT INTO product_vec(rowid, embedding)
 
 SELECT p.title FROM product_vec AS v JOIN products AS p ON p.id = v.rowid
 WHERE v.embedding MATCH ragite_embed('docs', 'something to drink from', 'query') AND k = 1;
+-- expect: "title":"Stainless steel water bottle"
 ```
 
 **Precomputed or exported vectors.** Store the BLOB once (for example a frequent query, or vectors for another tool) and reuse it; `vec_to_json` from sqlite-vec turns it into a JSON array:

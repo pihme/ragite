@@ -1,10 +1,18 @@
-# ragite
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/ragite-readme-lockup-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/ragite-readme-lockup-light.svg">
+    <img alt="ragite" src="docs/assets/ragite-readme-lockup-light.svg" width="280">
+  </picture>
+</h1>
 
 Embeddable, CPU-friendly retrieval (RAG) as a SQLite extension.
 
-Website: https://pihme.github.io/ragite/
+[![ci](https://img.shields.io/github/actions/workflow/status/pihme/ragite/ci.yml?branch=main&label=ci&style=flat-square)](https://github.com/pihme/ragite/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/pihme/ragite?display_name=release&label=release&style=flat-square)](https://github.com/pihme/ragite/releases/latest)
+[![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-2b6f8a?style=flat-square)](#license)
 
-User guide: [docs/guide.md](docs/guide.md)
+**[Website](https://pihme.github.io/ragite/)** · [User guide](docs/guide.md) · [Releases](https://github.com/pihme/ragite/releases)
 
 ## What it is
 

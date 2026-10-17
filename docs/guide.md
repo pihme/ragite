@@ -32,7 +32,7 @@ SELECT name, technical_id FROM ragite_default_model();
 - `<name>`, the **document table**: one row per document, with the columns `doc_id`, `text`, `source`, `format`, `hash`, and `score`. You write here.
 - `<name>_chunks`, the **chunk table**: read-only, one row per chunk, with the columns `chunk`, `doc_id`, `source`, `start`, `end`, `heading_path`, `meta_json`, and `score`.
 
-It also creates internal tables named `<name>_documents`, `<name>_chunk_rows`, `<name>_vec`, and `<name>_fts`. The table uses the build's default model unless you pass `model` (see [section 6](#6-models)).
+It also creates internal tables named `<name>_documents`, `<name>_chunk_rows`, `<name>_vec`, and `<name>_fts`. They are an implementation detail: do not query or write them directly, and do not rely on their names or columns. The table uses the build's default model unless you pass `model` (see [section 6](#6-models)).
 
 ```sql
 CREATE VIRTUAL TABLE docs USING ragite;
@@ -166,29 +166,6 @@ The query text is searched in the full-text index **as one exact phrase** (REQ-7
 SELECT chunk, round(score, 4) AS score
 FROM docs_chunks WHERE docs_chunks MATCH 'replace the binary' LIMIT 1;
 -- expect: "chunk":"Stop the service before you replace the binary."
-```
-
-### Vector-only and full-text-only search
-
-The internal tables can be queried directly when you want one side only. `<name>_vec` is a [sqlite-vec](https://github.com/asg017/sqlite-vec) `vec0` table and `<name>_fts` an FTS5 table; both use the chunk id as `rowid`, which joins to `<name>_chunks`. These are internal tables, so their names and columns may change between versions; prefer `MATCH` where it fits.
-
-Vector-only, with `ragite_embed` turning the query into a vector with the table's model (`distance` is cosine distance, lower is closer):
-
-```sql
-SELECT c.chunk, c.source, round(v.distance, 4) AS distance
-FROM docs_vec AS v JOIN docs_chunks AS c ON c.rowid = v.rowid
-WHERE v.embedding MATCH ragite_embed('docs', 'How do I upgrade?', 'query') AND k = 3
-ORDER BY v.distance;
-```
-
-Full-text-only, with the full FTS5 query syntax that `MATCH` on a ragite table does not accept:
-
-```sql
-SELECT c.chunk, round(bm25(docs_fts), 4) AS bm25
-FROM docs_fts JOIN docs_chunks AS c ON c.rowid = docs_fts.rowid
-WHERE docs_fts MATCH 'service OR warranty'
-ORDER BY bm25(docs_fts) LIMIT 5;
--- expect: "chunk":"The warranty lasts two years."
 ```
 
 ## 4. Linking results to your own data

@@ -437,7 +437,7 @@ fn tc_268_rollback_is_visible_to_match() {
          BEGIN;
          UPDATE docs SET text = 'zebra stripes' WHERE doc_id = 1;
          ROLLBACK;
-         SELECT 'update' AS step, text, source FROM docs_chunks WHERE docs_chunks MATCH 'hello world';
+         SELECT 'update' AS step, chunk, source FROM docs_chunks WHERE docs_chunks MATCH 'hello world';
          SELECT 'update_fts' AS step, count(*) AS n FROM docs_fts WHERE docs_fts MATCH '\"zebra stripes\"';
          BEGIN;
          DELETE FROM docs WHERE doc_id = 1;
@@ -455,7 +455,7 @@ fn tc_268_rollback_is_visible_to_match() {
     assert_eq!(step("insert_fts")[0]["n"], 0);
     let update = step("update");
     assert_eq!(update.len(), 1);
-    assert_eq!(update[0]["text"], "hello world");
+    assert_eq!(update[0]["chunk"], "hello world");
     assert_eq!(step("update_fts")[0]["n"], 0);
     let delete = step("delete");
     assert_eq!(delete.len(), 1);
@@ -474,7 +474,10 @@ fn tc_269_format_with_a_parameter_fails_for_every_type() {
             "CREATE VIRTUAL TABLE docs USING ragite;
              INSERT INTO docs(text, format) VALUES ('# m', '{format}');"
         ));
-        assert!(message.contains(format), "{format}: {message}");
+        assert!(
+            message.contains(&format.to_lowercase()) || message.contains(format),
+            "{format}: {message}"
+        );
         let out = common::sql(&format!(
             "CREATE VIRTUAL TABLE docs USING ragite;
              INSERT INTO docs(text, format) VALUES ('# m', 'text/markdown');

@@ -68,14 +68,14 @@ fn tc_267_readme_quickstart_runs_as_written() {
 
     let doc = rows
         .iter()
-        .find(|r| r.get("text").is_some() && r.get("score").is_none())
+        .find(|r| r.get("text").is_some())
         .expect("document row");
     assert!(doc["text"].as_str().unwrap().starts_with("# Installation"));
     assert_eq!(doc["source"], "manual.md");
 
     let hits: Vec<_> = rows
         .iter()
-        .filter(|r| r.get("score").is_some())
+        .filter(|r| r.get("chunk").is_some())
         .collect();
     assert!(!hits.is_empty(), "MATCH returned no chunk");
     assert!(hits.iter().all(|r| r["source"] == "manual.md"));

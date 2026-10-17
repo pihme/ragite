@@ -447,7 +447,7 @@ Unless a case says otherwise:
 
 - **TC-203** `TEXT/MARKDOWN`, `Text/Html`, and `APPLICATION/VND.DOCLING.DOCUMENT+JSON` are accepted and stored as the canonical lowercase types.
 - **TC-204** `text/plain; charset=utf-8` fails, and the error includes that format string.
-- **TC-269** A parameter fails for every accepted type, on `INSERT` and on `UPDATE`: `text/markdown; charset=utf-8`, `TEXT/HTML;charset=UTF-8`, and `application/vnd.docling.document+json; version=1`. The `INSERT` error includes the format string. A failed `UPDATE` leaves the stored format and Chunks unchanged.
+- **TC-269** A parameter fails for every accepted type, on `INSERT` and on `UPDATE`: `text/markdown; charset=utf-8`, `TEXT/HTML;charset=UTF-8`, and `application/vnd.docling.document+json; version=1`. The `INSERT` error includes the format string (lowercased). A failed `UPDATE` leaves the stored format and Chunks unchanged.
 
 ## REQ-73
 

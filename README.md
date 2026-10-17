@@ -21,7 +21,7 @@ VALUES ('# Installation
 
 Run the installer and restart the application.', 'manual.md', 'text/markdown');
 SELECT text, source FROM docs WHERE source = 'manual.md';
-SELECT text, source, score FROM docs_chunks WHERE docs_chunks MATCH 'How do I install it?' LIMIT 5;
+SELECT chunk, source, score FROM docs_chunks WHERE docs_chunks MATCH 'How do I install it?' LIMIT 5;
 ```
 
 This block is run as a test (`crates/ragite-sqlite/tests/readme.rs`), so it stays correct.

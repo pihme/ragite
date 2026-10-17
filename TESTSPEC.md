@@ -576,3 +576,4 @@ Unless a case says otherwise:
 
 - **TC-267** The SQL block under *Quickstart* in `README.md` runs unchanged in the `sqlite3` shell started in the directory of the built extension, including `load_extension('./libragite')`. The default Model row it prints matches the technical id named in the README, the Document row has Source `manual.md`, and `MATCH` returns at least one Chunk with a Score.
 - **TC-270** On a fresh checkout with Git LFS, the commands in CONTRIBUTING.md (`cargo fetch --locked`, `cargo build -p ragite-sqlite`, `cargo test --workspace`) pass without the Makefile. CI job `fresh-checkout` runs exactly those commands.
+- **TC-271** Every `sql` block in `docs/guide.md` runs in order in one `sqlite3` session started in the directory of the built extension, without an error. Each `-- expect:` line in a block names text that appears in that block's JSON output.

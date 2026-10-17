@@ -51,6 +51,27 @@ jobs:
       - name: Test
         run: make test
 
+  # The documented commands without the Makefile, on a fresh checkout (TC-270).
+  fresh-checkout:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install SQLite
+        run: sudo apt-get update && sudo apt-get install -y sqlite3
+
+      - name: Commands from CONTRIBUTING.md
+        run: |
+          cargo fetch --locked
+          cargo build -p ragite-sqlite
+          cargo test --workspace
+
   # Apple's sqlite3 cannot load extensions. Homebrew's can. Windows uses the sqlite package.
   parity-platform:
     name: parity (${{ matrix.os }})

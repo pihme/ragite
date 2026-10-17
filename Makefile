@@ -36,7 +36,7 @@ test:
 	cargo test -p ragite-core --no-default-features --target-dir target/provider --lib tc_54_tc_55_tc_126_provider_prefixes
 
 # release-plz only sees commits that touch files inside a crate directory.
-# This file lists the release inputs that live outside them (the workspace
+# The release-inputs.txt files list the release inputs that live outside them (the workspace
 # Cargo.toml with the release profile, and the built-in Model), so a change to
 # one of them also changes a release-inputs.txt file in a crate directory and
 # reaches the changelog.

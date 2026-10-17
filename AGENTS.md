@@ -29,6 +29,14 @@ License: **MIT OR Apache-2.0** (dual, Rust convention; `LICENSE-MIT`, `LICENSE-A
 - **No comments, reviews, label changes, closes or merges on other people's issues and PRs** unless the maintainer asked for it in the session. Exception: Dependabot PRs (see below). Opening issues for your own findings and closing them with your own commits (`Closes #n`) is fine.
 - **Never write the skip-CI token** (the word `skip` and `ci` in square brackets, or any of its variants) in a commit message, not even quoted or explained: GitHub then skips CI for that push and no release is cut. Only `release.py` puts it in its own release commits.
 
+### Pull request workflow
+
+- **The `ready-for-qa` label is the only readiness signal.** Chat messages do not count. Before pushing further commits to a PR, remove `ready-for-qa`; add it back once the push is done and CI is green.
+- **QA picks up `ready-for-qa` PRs on its own.** No ping is needed.
+- **After a rebase, QA reviews only the delta** with `git range-diff`. When the rebase only resolved conflicts, say so in the PR.
+- **Long-running jobs run in the background or at the end** of a work step. Terminate orphaned runs (cancelled work, superseded commits).
+- **PRs that touch shared files** (`TESTSPEC.md`, `CONTRIBUTING.md`, `THIRD_PARTY_NOTICES.md`) are merged one at a time, smallest first. After each merge, update the other open PRs to `main` right away. Always base a new PR on the current `main`.
+
 ### Versions and releases
 
 - SemVer, one tag per artifact: `ragite/vX.Y.Z`.

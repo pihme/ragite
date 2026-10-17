@@ -1,12 +1,12 @@
 {
  "model": "potion-multilingual-128M@73908c3438cf03b6a01bcb9611d62b23d0726f08",
- "commit": "9d283ec690a0ca577cb9f45d4ddfeb757aa4e09e",
+ "commit": "c1cb020acc3ef6eab8c219df5b90b8c229a81740",
  "machine": "grok-bot-vm-416642740",
  "cpus": 8,
- "binary_bytes": 537840872,
+ "binary_bytes": 535417104,
  "db_bytes": 49385472,
- "peak_rss_kb": 1817168,
- "chunks_per_second": 2794.6,
- "latency_ms_p50": 10.46,
- "latency_ms_p95": 12.47
+ "peak_rss_kb": 1816160,
+ "chunks_per_second": 3089.2,
+ "latency_ms_p50": 9.72,
+ "latency_ms_p95": 10.64
 }

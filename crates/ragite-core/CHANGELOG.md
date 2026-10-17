@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- mark the switch to potion-retrieval-32M (0.2.0, [#32](https://github.com/pihme/ragite/pull/32)) as breaking; store the tokenizers in Git LFS ([#34](https://github.com/pihme/ragite/pull/34))
+- [**breaking**] default Model potion-retrieval-32M is breaking; tokenizers in LFS ([#34](https://github.com/pihme/ragite/pull/34))
 
 ### Fixed
 
@@ -26,8 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- [**breaking**] make potion-retrieval-32M the built-in default Model ([#32](https://github.com/pihme/ragite/pull/32))
-  Existing databases indexed with the old default potion-base-8M (dimension 256) must be re-indexed: the built-in Model now has a different technical id and dimension 512. The extension grows from ~36 MB to ~131 MB.
+- make potion-retrieval-32M the built-in default Model ([#32](https://github.com/pihme/ragite/pull/32))
 
 ### Fixed
 

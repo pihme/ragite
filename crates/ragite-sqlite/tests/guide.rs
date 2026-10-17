@@ -13,6 +13,21 @@ const MARKER: &str = "ragite-guide-block-";
 fn guide_blocks() -> Vec<String> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let guide = std::fs::read_to_string(root.join("docs/guide.md")).unwrap();
+    // Only a fence written exactly as ```sql at the start of a line is run.
+    // Fail on any other SQL fence, so a block is never skipped silently.
+    for (n, line) in guide.lines().enumerate() {
+        let Some(info) = line.trim_start().strip_prefix("```") else {
+            continue;
+        };
+        if info.trim().to_ascii_lowercase().starts_with("sql") {
+            assert_eq!(
+                line,
+                "```sql",
+                "docs/guide.md line {}: write SQL fences as ```sql at the start of a line",
+                n + 1
+            );
+        }
+    }
     let mut blocks = Vec::new();
     let mut rest = guide.as_str();
     while let Some((_, after)) = rest.split_once("\n```sql\n") {

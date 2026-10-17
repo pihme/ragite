@@ -48,6 +48,8 @@ The chunker, the scoring algorithm, and the other presets are fixed. You cannot 
 
 If you want different presets, fork the repository and change the requirements.
 
+Where those presets live in the code, and how to add a document type, write or change a chunker, or change the fusion: [docs/tinkering.md](docs/tinkering.md).
+
 ## Status
 
 See [ROADMAP.md](ROADMAP.md) for what versions 1.0 and 2.0 will deliver.

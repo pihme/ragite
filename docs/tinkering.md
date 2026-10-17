@@ -7,7 +7,7 @@ This guide is for contributors and for anyone running a fork. It explains where 
 3. [Change an existing chunker](#3-change-an-existing-chunker)
 4. [Influence search results and the fusion](#4-influence-search-results-and-the-fusion)
 
-Every name below is a real file, type, or function on `main`. If one has moved, trust the code and fix this file in the same pull request.
+For using ragite as it is, read the [user guide](guide.md) instead. Every name below is a real file, type, or function on `main`. If one has moved, trust the code and fix this file in the same pull request.
 
 ## Before you start: presets are fixed on purpose
 

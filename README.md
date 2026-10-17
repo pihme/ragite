@@ -1,8 +1,7 @@
 <h1>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/ragite-readme-lockup-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/assets/ragite-readme-lockup-light.svg">
-    <img alt="ragite" src="docs/assets/ragite-readme-lockup-light.svg" width="280">
+    <img alt="ragite" src="docs/assets/ragite-readme-lockup-universal.svg" width="280">
   </picture>
 </h1>
 

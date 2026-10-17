@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- [**breaking**] default Model potion-retrieval-32M is breaking; tokenizers in LFS ([#34](https://github.com/pihme/ragite/pull/34))
+- mark the switch to potion-retrieval-32M (0.2.0, [#32](https://github.com/pihme/ragite/pull/32)) as breaking; store the tokenizers in Git LFS ([#34](https://github.com/pihme/ragite/pull/34))
 
 ### Fixed
 
@@ -20,14 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- look up a chunk by rowid ([#26](https://github.com/pihme/ragite/pull/26))
 - lock the non-equivalent mutation survivors ([#33](https://github.com/pihme/ragite/pull/33))
+
+### Performance
+
+- look up a chunk by rowid ([#26](https://github.com/pihme/ragite/pull/26))
+- fat LTO, codegen-units = 1 and strip for release builds: `libragite.so` is 6.9 MB smaller (135.1 MB) ([#39](https://github.com/pihme/ragite/pull/39))
 
 ## [0.2.0](https://github.com/pihme/ragite/compare/ragite/v0.1.1...ragite/v0.2.0) - 2026-10-15
 
 ### Added
 
-- make potion-retrieval-32M the built-in default Model ([#32](https://github.com/pihme/ragite/pull/32))
+- [**breaking**] make potion-retrieval-32M the built-in default Model ([#32](https://github.com/pihme/ragite/pull/32))
+  Existing databases indexed with the old default potion-base-8M (dimension 256) must be re-indexed: the built-in Model now has a different technical id and dimension 512. The extension grows from ~36 MB to ~131 MB.
 
 ### Fixed
 

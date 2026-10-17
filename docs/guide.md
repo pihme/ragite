@@ -89,7 +89,7 @@ SELECT chunk, heading_path, meta_json FROM docs_chunks WHERE source = 'contract.
 
 ### How documents are chunked
 
-Chunking is fixed for a build; there are no chunking parameters to pass. In version 1:
+Chunking is fixed for a build; there are no chunking parameters to pass. To change it in the code, see [tinkering.md](tinkering.md). In version 1:
 
 - A chunk holds at most **512 Unicode characters**. A longer paragraph is split, and each next piece repeats the last **64 characters** of the previous one.
 - `text/plain`: one chunk per paragraph (paragraphs are separated by a blank line).
@@ -157,6 +157,8 @@ FROM docs WHERE docs MATCH 'Does it need a GPU?' LIMIT 1;
 ```
 
 The score is a rank-fusion number, not a similarity: a chunk ranked first in one list gets `1/61` (about 0.0164) from that list, and a chunk in both lists adds both terms (at most `2/61`, about 0.0328). Compare scores within one query, not across queries, and do not use them as an absolute threshold.
+
+k, the weights, and the candidate depth are fixed in the code. [tinkering.md](tinkering.md#4-influence-search-results-and-the-fusion) shows where they live and what SQL can still do on top of the fused rows.
 
 ### What the full-text side matches
 

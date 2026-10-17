@@ -78,7 +78,8 @@ fn tc_10_tc_64_tc_65_notices_and_dependency_licenses() {
         .expect("cargo metadata");
     assert!(
         output.status.success(),
-        "{}",
+        "cargo metadata --offline failed; run `cargo fetch --locked` once first \
+         (or run `make test`), see CONTRIBUTING.md\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     let meta: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();

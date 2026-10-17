@@ -20,11 +20,27 @@ The tracker is public. Never paste tokens, keys, credentials or real service res
 
 ## Build and test locally
 
-<!-- TODO: requirements (runtime versions, tools) and anything the tests need or do not need. -->
+Requirements:
+
+- **Rust** 1.88 or newer (stable, via [rustup](https://rustup.rs/)); `rust-version` in `Cargo.toml` is the minimum.
+- **Git LFS.** The model weights and tokenizers under `models/` are LFS files. Run `git lfs install` before cloning, or `git lfs pull` afterwards. A build with LFS pointer files instead of the real files stops with a message saying so.
+- **A C compiler** (gcc or clang; MSVC on Windows). SQLite, sqlite-vec, and the tokenizer dependencies are compiled from C/C++ sources, so a C++ compiler is needed too (`build-essential` on Debian/Ubuntu, Xcode command line tools on macOS).
+- **The `sqlite3` shell**, which the integration tests drive (`sqlite3` package on Debian/Ubuntu; Homebrew `sqlite` on macOS).
+- A few GB of free RAM and disk: the debug build embeds the 129 MB Model.
 
 ```bash
 make test
 ```
+
+Without `make`, the same Rust tests run with:
+
+```bash
+cargo fetch --locked          # the license test runs `cargo metadata --offline`
+cargo build -p ragite-sqlite  # the integration tests load target/debug/libragite.so
+cargo test --workspace
+```
+
+If the extension is not built or a crate is not downloaded, the failing test says which of the two commands is missing. CI runs exactly these three commands on a fresh checkout (job `fresh-checkout`, TC-270).
 
 `make test` runs on Linux. CI also builds the default extension on macOS and Windows and runs the parity test (TC-246) there. The macOS job uses Homebrew SQLite, because the system `sqlite3` cannot load an extension.
 

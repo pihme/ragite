@@ -12,7 +12,12 @@ pub fn extension_path() -> PathBuf {
     path.pop();
     path.pop();
     path.push(extension_file());
-    assert!(path.is_file(), "missing extension at {}", path.display());
+    assert!(
+        path.is_file(),
+        "missing extension at {}; build it first with `cargo build -p ragite-sqlite` \
+         (or run `make test`), see CONTRIBUTING.md",
+        path.display()
+    );
     path
 }
 

@@ -224,8 +224,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # release-plz only sees commits that touch a crate directory. A change to the
-  # workspace Cargo.toml or the built-in Model must refresh this file so the
-  # commit reaches the changelog and the release notes.
+  # workspace Cargo.toml or the built-in Model must refresh the matching
+  # release-inputs.txt file (ragite-sqlite or ragite-core) so the commit reaches
+  # the changelog and the release notes.
   release-inputs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5

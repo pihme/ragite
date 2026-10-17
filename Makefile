@@ -38,7 +38,8 @@ test:
 # release-plz only sees commits that touch files inside a crate directory.
 # This file lists the release inputs that live outside them (the workspace
 # Cargo.toml with the release profile, and the built-in Model), so a change to
-# one of them also changes a file in ragite-sqlite and reaches the changelog.
+# one of them also changes a release-inputs.txt file in a crate directory and
+# reaches the changelog.
 # Stage the change first: the ids come from the Git index.
 # The built-in Model is embedded by ragite-core (crates/ragite-core/src/model.rs),
 # so its ids go into that crate; the workspace Cargo.toml (release profile) goes

@@ -224,6 +224,25 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Open or update the release pull request after tests pass on main.
+  # release-plz only sees commits that touch a crate directory. A change to the
+  # workspace Cargo.toml or the built-in Model must refresh this file so the
+  # commit reaches the changelog and the release notes.
+  release-inputs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check crates/ragite-sqlite/release-inputs.txt
+        run: |
+          make release-inputs
+          if ! git diff --exit-code -- crates/ragite-sqlite/release-inputs.txt; then
+            echo "::error::crates/ragite-sqlite/release-inputs.txt is stale. Run 'make release-inputs' and commit it, so release-plz lists this change."
+            exit 1
+          fi
+
   release-plz-pr:
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository_owner == 'pihme'

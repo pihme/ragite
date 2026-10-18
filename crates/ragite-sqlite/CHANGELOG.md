@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2](https://github.com/pihme/ragite/compare/ragite/v0.3.1...ragite/v0.3.2) - 2026-10-18
+
+### Fixed
+
+- apply = and IN before the fusion depth ([#57](https://github.com/pihme/ragite/pull/57))
+
+### Other
+
+- correct REQ-15 so LIMIT stays on the fused rows ([#59](https://github.com/pihme/ragite/pull/59))
+- specify the sqlite-vec 0.1.9 surface ([#60](https://github.com/pihme/ragite/pull/60))
+
 ## [0.3.1](https://github.com/pihme/ragite/compare/ragite/v0.3.0...ragite/v0.3.1) - 2026-10-18
 
 ### Other

@@ -144,8 +144,7 @@ SELECT (SELECT count(*) FROM docs WHERE source = 'draft.txt') AS drafts,
 
 - On `<name>_chunks`, `MATCH` returns chunks.
 - On `<name>`, it returns each matching document once, scored by its best chunk.
-- Use `LIMIT` to take fewer rows. Without it you get every fused row (at most the candidate depth).
-- Further `WHERE` filters, joins, and `ORDER BY` work as usual in SQLite. Note that a filter such as `source = '...'` is applied after the search, to the fused candidates.
+- Use `LIMIT` to take fewer rows. Without it you get every fused row (at most the candidate depth). `LIMIT` does not change scores. See [Narrowing a search](#narrowing-a-search).
 
 ```sql
 SELECT chunk, source, round(score, 4) AS score
@@ -160,6 +159,25 @@ The score is a rank-fusion number, not a similarity: a chunk ranked first in one
 
 k, the weights, and the candidate depth are fixed in the code. [tinkering.md](tinkering.md#4-influence-search-results-and-the-fusion) shows where they live and what SQL can still do on top of the fused rows.
 
+### Narrowing a search
+
+`=` and `IN` on this table's own columns select the rows **before** the 50 candidates are chosen (REQ-99). Name the manual and the search stays inside it, including when other documents would otherwise fill those 50 slots:
+
+```sql
+SELECT source FROM docs
+WHERE docs MATCH 'How do I upgrade?' AND source = 'manual.md';
+-- expect: "source":"manual.md"
+```
+
+On `docs` those columns are `doc_id`, `text`, `source`, `format`, `hash`, and `rowid`. On `docs_chunks` they are `chunk`, `doc_id`, `source`, `start`, `end`, `heading_path`, `meta_json`, and `rowid`. Several of them together all apply: `source = 'manual.md' AND format = 'text/markdown'` searches that subset and nothing else. The score is the rank **inside the subset**, so the same chunk can score differently when the query has no such filter.
+
+These do not select rows before the search. Each one only sees the fused candidates, so a real match outside the top 50 can be missing:
+
+- `score` is filled in by the fusion. `WHERE score > 0.02` can drop weak results. It cannot reach a chunk the top 50 never included (REQ-100).
+- `LIMIT` and `OFFSET` take a window of the fused rows, and `ORDER BY` reorders them. They do not change who was ranked or what the scores are (REQ-101).
+- A condition on **another table** in a join never reaches RAGite. `JOIN pages ON ... WHERE pages.lang = 'en'` attaches your columns to chunks the search already returned. To search only some of your rows, name a ragite column in the same query, such as `source = 'page:11'` or `doc_id = 4` (REQ-102). [Linking results](#4-linking-results-to-your-own-data) shows the join, and it has this limit.
+- `LIKE`, `!=`, `<`, `>`, and `BETWEEN` do not name the rows to keep, so they also run only on the fused rows (REQ-103). `source = 'wikipedia'` finds a document outside the global top 50. `source LIKE 'wiki%'` does not. An `OR` of equalities, such as `source = 'a' OR source = 'b'`, is included when SQLite turns it into `IN` or runs one search per value.
+
 ### What the full-text side matches
 
 The query text is searched in the full-text index **as one exact phrase** (REQ-75). FTS5 operators (`AND`, `OR`, `NOT`, `*`, quotes) are plain text, and there is no stemming (`install` does not match `installation`). A natural-language question rarely appears word for word in a document, so for such queries the result is effectively the vector ranking; the full-text side helps when the query quotes the document, such as an error message, a name, or a code identifier:
@@ -172,7 +190,7 @@ FROM docs_chunks WHERE docs_chunks MATCH 'replace the binary' LIMIT 1;
 
 ## 4. Linking results to your own data
 
-`source` is yours: store whatever lets you find the original, and keep everything else (URL, title, author, permissions) in your own tables. Two common patterns:
+`source` is yours: store whatever lets you find the original, and keep everything else (URL, title, author, permissions) in your own tables. A condition on your table does not narrow the search. The join attaches your columns to chunks the search already returned, which is at most the top 50. To search only some rows, add `=` or `IN` on a ragite column in the same query (`source`, `doc_id`, or `rowid`). See [Narrowing a search](#narrowing-a-search). Two common patterns:
 
 **Join on `source`.** Use your own key as `source` and join it back:
 

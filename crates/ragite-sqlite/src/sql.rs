@@ -4,11 +4,11 @@ use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::ptr;
 
 use libsqlite3_sys::{
-    sqlite3, sqlite3_bind_blob, sqlite3_bind_int64, sqlite3_bind_null, sqlite3_bind_text,
+    SQLITE_DONE, SQLITE_NULL, SQLITE_OK, SQLITE_ROW, SQLITE_TRANSIENT, sqlite3, sqlite3_bind_blob,
+    sqlite3_bind_int64, sqlite3_bind_null, sqlite3_bind_text, sqlite3_bind_value,
     sqlite3_column_bytes, sqlite3_column_int64, sqlite3_column_text, sqlite3_column_type,
-    sqlite3_errmsg, sqlite3_finalize, sqlite3_last_insert_rowid, sqlite3_malloc, sqlite3_prepare_v2,
-    sqlite3_db_handle, sqlite3_step, sqlite3_stmt, SQLITE_DONE, SQLITE_NULL, SQLITE_OK,
-    SQLITE_ROW, SQLITE_TRANSIENT,
+    sqlite3_db_handle, sqlite3_errmsg, sqlite3_finalize, sqlite3_last_insert_rowid, sqlite3_malloc,
+    sqlite3_prepare_v2, sqlite3_step, sqlite3_stmt, sqlite3_value,
 };
 
 pub fn alloc_text(msg: &str) -> *mut c_char {
@@ -59,9 +59,7 @@ impl Stmt {
     pub fn prepare(db: *mut sqlite3, sql: &str) -> Result<Self, String> {
         let c_sql = CString::new(sql).map_err(|_| "sql contains a nul".to_string())?;
         let mut raw = ptr::null_mut();
-        let rc = unsafe {
-            sqlite3_prepare_v2(db, c_sql.as_ptr(), -1, &mut raw, ptr::null_mut())
-        };
+        let rc = unsafe { sqlite3_prepare_v2(db, c_sql.as_ptr(), -1, &mut raw, ptr::null_mut()) };
         if rc != SQLITE_OK {
             return Err(errmsg(db));
         }
@@ -87,6 +85,10 @@ impl Stmt {
             )
         };
         self.check(rc)
+    }
+
+    pub fn bind_value(&self, index: c_int, value: *mut sqlite3_value) -> Result<(), String> {
+        self.check(unsafe { sqlite3_bind_value(self.raw, index, value) })
     }
 
     pub fn bind_blob(&self, index: c_int, value: &[u8]) -> Result<(), String> {

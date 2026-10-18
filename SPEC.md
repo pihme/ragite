@@ -1,6 +1,6 @@
 # RAGite specification
 
-Status: draft, pre-1.0. Nothing here is implemented yet. Requirements carry stable IDs (`REQ-n`); new ones get the next free number, removed ones are not reused.
+Status: draft, pre-1.0. Nothing here is implemented yet. Requirements carry stable IDs (`REQ-n`); new ones get the next free number, removed ones are not reused. Section 10 records each change, newest first.
 
 ## 1. Goal
 
@@ -94,7 +94,11 @@ The Score is the number Reciprocal Rank Fusion assigns to a Chunk. A higher Scor
 - **REQ-80** The top row of a list has rank 1, so its term is `1/61`. A Chunk that appears in both lists sums its two terms. A Document's Score is its best Chunk's Score. Do not reopen.
 - **REQ-75** A `MATCH` string is plain text. RAGite searches the FTS5 index for that text as one phrase, with any quotation marks in the text escaped so they stay inside the phrase. `AND`, `OR`, `NOT`, `*`, and quotation marks are not operators. The vector side embeds that same plain text, with the query prefix. Version 1 accepts no FTS5 query syntax from the caller. Do not reopen.
 - **REQ-61** The text embedded for a Chunk is the passage prefix followed by the Chunk text. The text embedded for a `MATCH` query is the query prefix followed by the query text. FTS indexes the Chunk text and searches the query text as one plain-text phrase, without a prefix (REQ-75). The heading path and `meta_json` are not part of either embedding or of the FTS index. Do not reopen.
-- Further `WHERE` filters, `JOIN`s with application tables and `ORDER BY` are left to SQLite.
+- **REQ-99** When `MATCH` is usable, RAGite builds each ranking in REQ-15 only from Chunks that satisfy the other constraints SQLite marks usable, for `=` and `IN`, on `rowid` and on every column except `score`. On the Document table those columns are `doc_id`, `text`, `source`, `format`, and `hash`, and `rowid` is `doc_id`. On `<name>_chunks` they are `chunk`, `doc_id`, `source`, `start`, `end`, `heading_path`, and `meta_json`, and `rowid` is the Chunk id. A constraint on the Document table keeps every Chunk of a Document that satisfies it. A constraint on `<name>_chunks` keeps the Chunks that satisfy it. Every such constraint applies. Both rankings keep their fixed depth inside that set. A Chunk that is first inside the set has rank 1 even when closer matches exist outside it, and its Score is that rank (REQ-80). A `rowid` equality keeps the search plan (REQ-96). Comparison of `rowid` follows REQ-96. Any other column uses SQLite's comparison for its declared type (REQ-78). When no Chunk satisfies the constraints, the query returns no rows and does not fail. An empty `MATCH` still returns no rows and does not run the Model (REQ-43). With no `MATCH`, a predicate selects from the full scan (REQ-42, REQ-96). Do not reopen.
+- **REQ-100** A comparison on `score` is applied to the fused rows. The Score is the result of the fusion, so it does not exist while the rankings are built and cannot select Chunks before the depth is counted. A Chunk outside that depth stays absent. Do not reopen.
+- **REQ-101** `LIMIT` and `OFFSET` choose a window of the fused rows (REQ-38). They do not shorten the rankings. A rank is a position in the depth-sized list, so a shorter list would assign different Scores. The row `LIMIT 1` returns has the Score it has when the query has no `LIMIT`. `ORDER BY` reorders the fused rows and leaves the set unchanged. With no `ORDER BY`, the order is REQ-41. Do not reopen.
+- **REQ-102** A predicate on another table in a `JOIN` is not a constraint on this virtual table. SQLite does not pass it to `xBestIndex`. The join runs on the fused rows, so a Document whose Chunks were outside the depth is absent even when the other table would have selected it. A caller searches that subset by naming a RAGite column in the same query, such as `source` or `doc_id`. Do not reopen.
+- **REQ-103** `LIKE`, `GLOB`, `REGEXP`, `IS`, `IS NOT`, and the inequalities are applied to the fused rows. They do not name a set of Chunk ids, so the rankings cannot be restricted to them before the depth is counted. `BETWEEN` arrives as two inequalities and follows the same rule. An `OR` of equalities is consumed when SQLite offers it as one `IN` or as a separate search for each arm. When SQLite marks no arm usable, it applies the `OR` to the fused rows. A Chunk outside the depth stays absent. Do not reopen.
 
 ### 4.6 Helper function
 
@@ -244,3 +248,17 @@ potion-retrieval-32M is the built-in Model. In the Model2Vec benchmark (bench/RE
 - Hybrid search: sqlite-vec + FTS5 with Reciprocal Rank Fusion in SQL.
 - Virtual tables: `sqlite-vec.c` (vec0 with `xBestIndex`/`xUpdate`), the FTS5 source (pattern for `MATCH`), `sqlite-loadable` (Rust FFI pattern; reference only, not a dependency).
 - Considered and not used: `rusqlite` (its `vtab` feature is read-only), `ort` (pulls in a C++ library).
+
+## 10. Change history
+
+Newest first. An entry names the requirements it adds or edits, and why. A requirement marked "Do not reopen" stays closed unless an entry says it was reopened.
+
+### 2026-10-18 — A column filter selects Chunks before the rankings are cut
+
+Removed the unnumbered sentence at the end of section 4.5: "Further `WHERE` filters, `JOIN`s with application tables and `ORDER BY` are left to SQLite." Added REQ-99, REQ-100, REQ-101, REQ-102, and REQ-103. No numbered requirement was reopened. REQ-15, REQ-38, REQ-80, and REQ-96 stay closed.
+
+`WHERE docs MATCH 'wal mode' AND source = 'wikipedia'` asks for the best matches among Documents with that Source. The example in section 4 is that query. Each ranking keeps a fixed number of Chunks (section 8.1). Building those rankings from the whole Table and applying the Source test afterwards drops a matching Document that sits outside that depth. Equality and `IN` name the values to keep, so REQ-99 counts the depth inside that set. A Chunk that leads the restricted lists is rank 1 even when closer matches exist outside them.
+
+The predicates that still run afterwards are separate requirements, because each has its own reason. REQ-100: `score` does not exist until the fusion has run. REQ-101: `LIMIT`, `OFFSET`, and `ORDER BY` window or reorder the fused rows, and shortening a ranking to the `LIMIT` would change Scores. REQ-102: a predicate on another table in a `JOIN` is never offered to this virtual table. REQ-103: `LIKE`, inequalities, and `BETWEEN` do not name a set of Chunk ids. The caller-facing account of all five is in the user guide, section 3, "Narrowing a search".
+
+TESTSPEC cases TC-272 through TC-275 and TC-281 check REQ-99. TC-277 checks REQ-100. TC-278 checks REQ-101. TC-279 checks REQ-102. TC-280 checks REQ-103.

@@ -2,7 +2,7 @@
 
 Status: draft, pre-1.0. Nothing here is implemented yet. Cases carry stable IDs (`TC-n`). Future tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-266.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-281.
 
 ## Conventions
 
@@ -571,6 +571,30 @@ Unless a case says otherwise:
 ## REQ-97
 
 - **TC-266** A table with `num_rows` 3 and a `num_cols` that does not fit in a grid produces one Chunk, `A` followed by two empty rows, and does not panic. A table declared as 200000 by 200000 with one cell, and a single cell positioned at row 200000 and column 200000, each produce one Chunk, `A`. A 2 by 2 table with cells only at the two corners is still `A`, a tab, a newline, a tab, and `D`.
+
+## REQ-99
+
+- **TC-272** Once `D` is recorded, a Table holds `D` Documents whose text is the query and whose Source is `other`, and one Document whose text is that query followed by more words in the same paragraph and whose Source is `keep`. Each Document is one Chunk. An unfiltered `MATCH` on `docs` returns no row with Source `keep`. `WHERE docs MATCH` the query `AND source = 'keep'` returns that Document. Its Score equals the Score the same text receives for that query when it is the only Document in a Table. The same predicate on `docs_chunks` returns that Chunk and no Chunk whose Source is `other`, with that same Score.
+- **TC-273** A Table holds `D` Documents with Source `keep`, format `text/html`, and text equal to the query, and one Document with Source `keep`, format `text/plain`, and the query inside a longer paragraph. `MATCH` with `source = 'keep'` returns no row for the plain Document. `MATCH` with `source = 'keep' AND format = 'text/plain'` returns that Document, and its Score equals the Score of that text searched alone. `hash =` its stored hash returns it. `text =` its stored text returns it. `format = 'text/html' AND source = 'keep'` returns html Documents and no plain Document.
+- **TC-274** Extend the table from TC-272 with one more Document, Source `also`, built like `keep`. The unfiltered `MATCH` returns neither `keep` nor `also`. `doc_id =` the `keep` id returns that Document. `rowid =` that id returns it, and `EXPLAIN QUERY PLAN` reports `INDEX 1:`. `source IN ('keep', 'also')` returns both Documents. Each Score equals the Score that Document receives for the same query when the Table holds only those two.
+- **TC-275** A Table holds the `D` exact-query Documents from TC-272 and one Markdown Document `# Kept`, a blank line, then a paragraph that contains the query. The unfiltered `MATCH` on `docs_chunks` returns neither the heading Chunk nor the body Chunk. `chunk =` the body text returns the body Chunk. `start =` the body's start and `end =` the body's end returns it. `heading_path = '["Kept"]'` returns it. Those predicates name a different start, a different end, or `heading_path = '[]'` and return no body row. `doc_id =` the Markdown Document returns the body Chunk at the Score that text receives when searched alone, and may also return the heading Chunk, because a constraint on the Document keeps every Chunk of that Document. `rowid =` the body Chunk returns only that Chunk, at that Score. A Table built the same way with one DoclingDocument instead of the Markdown Document has a content Chunk the unfiltered `MATCH` omits. `meta_json =` that Chunk's stored object returns it. A different `meta_json` object returns no row.
+- **TC-281** On the table from TC-272, `source = 'missing'` with `MATCH` returns no row and does not fail. An empty `MATCH` with `source = 'keep'` returns no row. With no `MATCH`, `source = 'keep'` returns that Document.
+
+## REQ-100
+
+- **TC-277** On the table from TC-272, `MATCH AND score > 0` does not return the `keep` Document.
+
+## REQ-101
+
+- **TC-278** On the table from TC-272, `LIMIT 1` returns one fused row, and that row's Score equals its Score in the same `MATCH` with no `LIMIT`. `LIMIT 1 OFFSET 1` returns the next fused row with that row's unlimited Score. `ORDER BY source` returns the same Documents as the `MATCH` without `ORDER BY`.
+
+## REQ-102
+
+- **TC-279** On the table from TC-272, an ordinary table `pages(path, project)` holds `('keep', 'wiki')`. `docs` joined to `pages` on `path = source`, with `pages.project = 'wiki'` and `docs MATCH` the query, does not return the `keep` Document.
+
+## REQ-103
+
+- **TC-280** On the table from TC-272, `source LIKE 'keep%'`, `source != 'other'`, and `rowid > 0` do not return the `keep` Document.
 
 ## Documentation and setup
 

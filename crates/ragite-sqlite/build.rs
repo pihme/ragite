@@ -13,6 +13,7 @@ fn main() {
     let mut build = cc::Build::new();
     build
         .file(sqlite_vec.join("sqlite-vec.c"))
+        .file(manifest.join("src/sqlite_in.c"))
         .include(&sqlite)
         .include(&sqlite_vec)
         .define("SQLITE_VEC_OMIT_FS", None)
@@ -29,7 +30,20 @@ fn main() {
     if target_os != "windows" {
         println!("cargo:rustc-link-lib=m");
     }
-    println!("cargo:rerun-if-changed={}", sqlite_vec.join("sqlite-vec.c").display());
-    println!("cargo:rerun-if-changed={}", sqlite_vec.join("sqlite-vec.h").display());
-    println!("cargo:rerun-if-changed={}", sqlite.join("sqlite3ext.h").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        sqlite_vec.join("sqlite-vec.c").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        manifest.join("src/sqlite_in.c").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        sqlite_vec.join("sqlite-vec.h").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        sqlite.join("sqlite3ext.h").display()
+    );
 }

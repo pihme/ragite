@@ -19,3 +19,8 @@ bench/.models/
 bench/results/
 __pycache__/
 *.pyc
+
+# SonarQube Cloud inputs (written in CI)
+lcov.info
+clippy-report.json
+.scannerwork/

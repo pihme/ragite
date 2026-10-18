@@ -109,20 +109,28 @@ jobs:
           cargo test -p ragite-sqlite --test parity
 
   # Coverage report only; there is no threshold and it never gates a merge.
+  # The same job feeds SonarQube Cloud (coverage plus Clippy findings), so the
+  # instrumented build runs only once.
   coverage:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      # Scan pull requests and main only, and only when the secret exists.
+      # Dependabot and fork PRs get no secret; Dependabot is also skipped explicitly.
+      RUN_SONAR: ${{ secrets.SONAR_TOKEN != '' && github.actor != 'dependabot[bot]' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') }}
     steps:
       - uses: actions/checkout@v7
         with:
           lfs: true
+          # Sonar needs the full history for blame and new-code detection.
+          fetch-depth: 0
 
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: llvm-tools-preview
+          components: llvm-tools-preview, clippy
 
       - uses: Swatinem/rust-cache@v2
 
@@ -158,6 +166,19 @@ jobs:
         with:
           name: lcov
           path: lcov.info
+
+      - name: Clippy report for SonarQube Cloud
+        if: env.RUN_SONAR == 'true'
+        # Report only: findings show up in SonarQube Cloud and do not fail the job.
+        run: |
+          env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
+            cargo clippy --workspace --all-targets --locked --message-format=json > clippy-report.json
+
+      - name: SonarQube Cloud scan
+        if: env.RUN_SONAR == 'true'
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   # Build and test the release profile that the published extension uses.
   release-profile:

@@ -1,6 +1,6 @@
 # Retrieval
 
-The language of the texts ragite stores and the passages it returns.
+The language of the texts RAGite stores and the passages it returns.
 
 ## Language
 
@@ -9,7 +9,7 @@ One input text, stored whole and cut into Chunks. A Document may contain no Chun
 _Avoid_: file, article, page
 
 **Document id**:
-The positive integer ragite assigns to one Document when it is inserted. It is the Document table's `rowid`. A deleted id is not assigned again. Chunk ids use a separate sequence.
+The positive integer RAGite assigns to one Document when it is inserted. It is the Document table's `rowid`. A deleted id is not assigned again. Chunk ids use a separate sequence.
 _Avoid_: source
 
 **Format**:
@@ -37,7 +37,7 @@ An opaque label the application attaches to a Document, such as a path, a URL, o
 _Avoid_: file, path, filename
 
 **Hash**:
-An opaque label stored with a Document. The caller may set it. When an insert omits it, ragite fills in the SHA-256 of the stored text.
+An opaque label stored with a Document. The caller may set it. When an insert omits it, RAGite fills in the SHA-256 of the stored text.
 _Avoid_: checksum, identity, key
 
 **Table**:

@@ -287,8 +287,8 @@ Unless a case says otherwise:
 
 ## REQ-47
 
-- **TC-130** On a connection where the extension is loaded and no ragite table exists, `ragite_list_models()` and `ragite_default_model()` return the built-in Model.
-- **TC-131** Creating and filling a ragite table does not change the row those two functions return.
+- **TC-130** On a connection where the extension is loaded and no RAGite table exists, `ragite_list_models()` and `ragite_default_model()` return the built-in Model.
+- **TC-131** Creating and filling a RAGite table does not change the row those two functions return.
 
 ## REQ-48
 
@@ -474,7 +474,7 @@ Unless a case says otherwise:
 
 ## REQ-77
 
-- **TC-216** On a connection with the extension loaded and no ragite table, `ragite_embed_model` of the built-in technical identifier returns a vector BLOB.
+- **TC-216** On a connection with the extension loaded and no RAGite table, `ragite_embed_model` of the built-in technical identifier returns a vector BLOB.
 
 ## REQ-78
 
@@ -535,7 +535,7 @@ Unless a case says otherwise:
 
 ## REQ-88
 
-- **TC-243** `CREATE VIRTUAL TABLE evil USING ragite(companion=1, parent=docs)` fails with `argument is not accepted: companion` and leaves no `evil` table. `CREATE VIRTUAL TABLE other USING ragite(parent=docs)` fails with `argument is not accepted: parent`. The companion ragite created for `docs` still reads after that database is opened again.
+- **TC-243** `CREATE VIRTUAL TABLE evil USING ragite(companion=1, parent=docs)` fails with `argument is not accepted: companion` and leaves no `evil` table. `CREATE VIRTUAL TABLE other USING ragite(parent=docs)` fails with `argument is not accepted: parent`. The companion RAGite created for `docs` still reads after that database is opened again.
 
 ## REQ-89
 

@@ -1,6 +1,6 @@
-# ragite user guide
+# RAGite user guide
 
-This guide covers everyday use of the ragite SQLite extension: storing documents, searching them, linking results back to your own data, the embedding functions, and models. Every `sql` block below is run in CI, top to bottom in one `sqlite3` session (TC-271), so the examples work as written. Lines starting with `-- expect:` are checked by that test; they are ordinary SQL comments for you.
+This guide covers everyday use of the RAGite SQLite extension: storing documents, searching them, linking results back to your own data, the embedding functions, and models. Every `sql` block below is run in CI, top to bottom in one `sqlite3` session (TC-271), so the examples work as written. Lines starting with `-- expect:` are checked by that test; they are ordinary SQL comments for you.
 
 The behaviour described here is specified in [SPEC.md](../SPEC.md); requirement ids such as REQ-75 point there.
 
@@ -40,11 +40,11 @@ SELECT ragite_table_model('docs') AS model;
 -- expect: "model":"potion-retrieval-32M@6fc8051fab2a1e0ee76689cf08c853792ac285e7"
 ```
 
-One database can hold several ragite tables. `ALTER TABLE ... RENAME` is not supported on them.
+One database can hold several RAGite tables. `ALTER TABLE ... RENAME` is not supported on them.
 
 ### Inserting
 
-An `INSERT` takes the whole document as `text`. ragite stores it, cuts it into chunks, embeds each chunk, and indexes it for full-text search, all inside your transaction. `source` is your own label for the document (a path, URL, title, or the id of a row in your own table); ragite returns it with every chunk. `format` is the media type; `hash` defaults to the SHA-256 of the text. `doc_id` is assigned by ragite.
+An `INSERT` takes the whole document as `text`. RAGite stores it, cuts it into chunks, embeds each chunk, and indexes it for full-text search, all inside your transaction. `source` is your own label for the document (a path, URL, title, or the id of a row in your own table); RAGite returns it with every chunk. `format` is the media type; `hash` defaults to the SHA-256 of the text. `doc_id` is assigned by RAGite.
 
 ```sql
 INSERT INTO docs(text, source) VALUES
@@ -69,7 +69,7 @@ SELECT doc_id, source, format, length(hash) AS hash_len FROM docs ORDER BY doc_i
 -- expect: "doc_id":3,"source":"https://example.com/faq","format":"text/html","hash_len":64
 ```
 
-The accepted formats are `text/plain` (the default), `text/markdown`, `text/html`, and `application/vnd.docling.document+json` (a [Docling](https://github.com/docling-project/docling) document as JSON). Case does not matter, and ragite stores the lowercase form. A parameter such as `; charset=utf-8` or any other type fails the statement.
+The accepted formats are `text/plain` (the default), `text/markdown`, `text/html`, and `application/vnd.docling.document+json` (a [Docling](https://github.com/docling-project/docling) document as JSON). Case does not matter, and RAGite stores the lowercase form. A parameter such as `; charset=utf-8` or any other type fails the statement.
 
 A DoclingDocument is the way to bring in PDFs and Office files: convert them with Docling, then insert the JSON. Its chunks carry `meta_json` with the page, section, and the Docling element reference:
 
@@ -140,7 +140,7 @@ SELECT (SELECT count(*) FROM docs WHERE source = 'draft.txt') AS drafts,
 
 ### Hybrid search with MATCH
 
-`MATCH` runs ragite's search: it embeds the query, takes the 50 nearest chunks by cosine similarity and the 50 best full-text (BM25) chunks, and fuses the two rankings with Reciprocal Rank Fusion (k = 60, equal weights). The `score` column is that fused score; higher is better, and rows come back best first.
+`MATCH` runs RAGite's search: it embeds the query, takes the 50 nearest chunks by cosine similarity and the 50 best full-text (BM25) chunks, and fuses the two rankings with Reciprocal Rank Fusion (k = 60, equal weights). The `score` column is that fused score; higher is better, and rows come back best first.
 
 - On `<name>_chunks`, `MATCH` returns chunks.
 - On `<name>`, it returns each matching document once, scored by its best chunk.
@@ -218,15 +218,15 @@ WHERE docs_chunks MATCH 'Stop the service' LIMIT 1;
 -- expect: "source":"manual.md"
 ```
 
-Remember to delete the ragite document when you delete the row it belongs to (for example in your application code or with a trigger).
+Remember to delete the RAGite document when you delete the row it belongs to (for example in your application code or with a trigger).
 
 ## 5. Embedding functions
 
-ragite exposes the model it uses, so you can embed text for your own purposes:
+RAGite exposes the model it uses, so you can embed text for your own purposes:
 
-- `ragite_embed(table, text, role)` embeds with the model of that ragite document table.
+- `ragite_embed(table, text, role)` embeds with the model of that RAGite document table.
 - `ragite_embed_model(technical_id, text, role)` embeds with a model by its technical id; it works before any table exists.
-- `role` is `'query'` or `'passage'`. It selects the model's query or passage prefix, as ragite uses them for searches and chunks. potion-retrieval-32M has empty prefixes, but other models may not, so pass the role that matches the use.
+- `role` is `'query'` or `'passage'`. It selects the model's query or passage prefix, as RAGite uses them for searches and chunks. potion-retrieval-32M has empty prefixes, but other models may not, so pass the role that matches the use.
 
 Both return a BLOB of little-endian float32 values, one per dimension (512 for potion-retrieval-32M, so 2048 bytes), the layout sqlite-vec uses. Both are deterministic, so you can use them in generated columns and indexes. Empty text fails.
 
@@ -252,7 +252,7 @@ SELECT round(vec_distance_cosine(ragite_embed('docs', 'reset my password', 'quer
 -- expect: "closer":1
 ```
 
-**Your own vector index**, for example over product titles that you do not want as ragite documents:
+**Your own vector index**, for example over product titles that you do not want as RAGite documents:
 
 ```sql
 CREATE TABLE products (id INTEGER PRIMARY KEY, title TEXT);
@@ -281,7 +281,7 @@ In Python, `struct.unpack(f"<{len(blob) // 4}f", blob)` or `numpy.frombuffer(blo
 
 ### The built-in model and its technical id
 
-A build of ragite contains exactly **one** model. The release build embeds potion-retrieval-32M (a static [Model2Vec](https://github.com/MinishLab/model2vec) model, English, MIT, 512 dimensions). Its **technical id** is `name@revision`, where the revision is the Hugging Face commit of the weights:
+A build of RAGite contains exactly **one** model. The release build embeds potion-retrieval-32M (a static [Model2Vec](https://github.com/MinishLab/model2vec) model, English, MIT, 512 dimensions). Its **technical id** is `name@revision`, where the revision is the Hugging Face commit of the weights:
 
 ```sql
 SELECT name, technical_id FROM ragite_list_models();
@@ -300,11 +300,11 @@ SELECT ragite_table_model('pinned') AS model;
 
 ### Opening a database with a different build
 
-If a database was indexed with a model that the loaded extension does not contain (for example a table from ragite 0.2, which used potion-base-8M with 256 dimensions), `SELECT` of the stored columns still works, but `MATCH`, `INSERT`, an `UPDATE` of `text` or `format`, and `ragite_embed` on that table fail. `ragite_table_model('<name>')` tells you which model a table needs.
+If a database was indexed with a model that the loaded extension does not contain (for example a table from RAGite 0.2, which used potion-base-8M with 256 dimensions), `SELECT` of the stored columns still works, but `MATCH`, `INSERT`, an `UPDATE` of `text` or `format`, and `ragite_embed` on that table fail. `ragite_table_model('<name>')` tells you which model a table needs.
 
 ### Switching to another model (re-indexing)
 
-Vectors from different models are not comparable, so switching means re-indexing. ragite does not re-embed a table in place; create a new table, copy the documents with `INSERT ... SELECT`, and drop the old one:
+Vectors from different models are not comparable, so switching means re-indexing. RAGite does not re-embed a table in place; create a new table, copy the documents with `INSERT ... SELECT`, and drop the old one:
 
 ```sql
 CREATE VIRTUAL TABLE docs_new USING ragite;

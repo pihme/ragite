@@ -1,4 +1,4 @@
-# Tinkering with ragite
+# Tinkering with RAGite
 
 This guide is for contributors and for anyone running a fork. It explains where the chunkers and the search live in the code and what to change for four common experiments:
 
@@ -7,11 +7,11 @@ This guide is for contributors and for anyone running a fork. It explains where 
 3. [Change an existing chunker](#3-change-an-existing-chunker)
 4. [Influence search results and the fusion](#4-influence-search-results-and-the-fusion)
 
-For using ragite as it is, read the [user guide](guide.md) instead. Every name below is a real file, type, or function on `main`. If one has moved, trust the code and fix this file in the same pull request.
+For using RAGite as it is, read the [user guide](guide.md) instead. Every name below is a real file, type, or function on `main`. If one has moved, trust the code and fix this file in the same pull request.
 
 ## Before you start: presets are fixed on purpose
 
-A ragite build has no runtime switch for chunk size, overlap, fusion constant, weights, or candidate depth. The [README](../README.md#limitations) says so, and [SPEC.md](../SPEC.md) marks most of these choices *Do not reopen*. Every change in this guide is therefore a **code change plus a spec change**, never a setting.
+A RAGite build has no runtime switch for chunk size, overlap, fusion constant, weights, or candidate depth. The [README](../README.md#limitations) says so, and [SPEC.md](../SPEC.md) marks most of these choices *Do not reopen*. Every change in this guide is therefore a **code change plus a spec change**, never a setting.
 
 - In a fork, change the code and the requirements together.
 - Upstream, open an issue first ([CONTRIBUTING.md](../CONTRIBUTING.md#chunker-scoring-and-other-presets)). A proposal that comes with benchmark numbers (see [Measure the effect](#measure-the-effect)) is reviewed first. A new requirement takes the next free `REQ-n`, and a new test case takes the next free `TC-n`. Numbers are never reused.
@@ -38,7 +38,7 @@ A ragite build has no runtime switch for chunk size, overlap, fusion constant, w
 
 A document type is the `format` value on `INSERT`/`UPDATE` (a media type). It decides which chunker cuts the text. Today exactly four are accepted: `text/plain`, `text/markdown`, `text/html`, and `application/vnd.docling.document+json`.
 
-**Spec first.** REQ-7 and REQ-32 list exactly those four and say *Do not reopen*. A fifth type needs a decision and a spec change. Update REQ-7 and REQ-32, add a section `5.6` that states the cut rules for the type (what a unit is, what `start`/`end` count, what the heading path is, what order Chunks come in), and extend REQ-95 if the type gets a fuzz target. Parsing binary source formats such as PDF or Office is out of scope (REQ-8). Convert those outside ragite, for example with Docling, and insert the result.
+**Spec first.** REQ-7 and REQ-32 list exactly those four and say *Do not reopen*. A fifth type needs a decision and a spec change. Update REQ-7 and REQ-32, add a section `5.6` that states the cut rules for the type (what a unit is, what `start`/`end` count, what the heading path is, what order Chunks come in), and extend REQ-95 if the type gets a fuzz target. Parsing binary source formats such as PDF or Office is out of scope (REQ-8). Convert those outside RAGite, for example with Docling, and insert the result.
 
 Then the code, in this order:
 
@@ -192,7 +192,7 @@ Everything SQL can do on top of the returned rows:
 
   This re-orders only the at most 50 fused rows. It cannot bring back a Chunk that fell outside the depth.
 - **Shape the input.** Splitting documents differently before `INSERT`, or choosing `text/markdown` over `text/plain` so headings become their own Chunks, changes what each Chunk contains, and so what each ranking sees.
-- **Use your own vectors next to ragite.** `ragite_embed(table, text, role)` and `ragite_embed_model(id, text, role)` return the same vectors ragite stores (REQ-17, REQ-69), so an application can keep its own vector table and combine it with `MATCH` results in SQL. ragite's own shadow tables (`<name>_vec`, `<name>_fts`, `<name>_chunk_rows`) are internal: their shape is not a public interface, and writing to them breaks the consistency between them.
+- **Use your own vectors next to RAGite.** `ragite_embed(table, text, role)` and `ragite_embed_model(id, text, role)` return the same vectors RAGite stores (REQ-17, REQ-69), so an application can keep its own vector table and combine it with `MATCH` results in SQL. RAGite's own shadow tables (`<name>_vec`, `<name>_fts`, `<name>_chunk_rows`) are internal: their shape is not a public interface, and writing to them breaks the consistency between them.
 
 ### Changing the fusion in code
 

@@ -4,13 +4,13 @@ Prepared, not yet run. Chooses the default Model among the 11 candidates in SPEC
 
 ## 1. Preround (no compute)
 
-`bench/preround/fetch_mteb.py` reads published scores from the data behind the MTEB leaderboard and writes [`preround/mteb_scores.md`](preround/mteb_scores.md) with source commit and date. Leaderboard scores are full-precision PyTorch runs, so they only pre-select; the finalists are measured again through ragite.
+`bench/preround/fetch_mteb.py` reads published scores from the data behind the MTEB leaderboard and writes [`preround/mteb_scores.md`](preround/mteb_scores.md) with source commit and date. Leaderboard scores are full-precision PyTorch runs, so they only pre-select; the finalists are measured again through RAGite.
 
 Proposed finalists (maintainer decides): bge-small-en-v1.5, e5-small-v2, nomic-embed-text-v1.5, multilingual-e5-small, plus potion-base-8M as the speed baseline. Decision after the Model2Vec run: potion-retrieval-32M is the built-in default.
 
 ## 2. Parity per finalist
 
-`parity/check_parity.py` embeds 300 sentences through ragite and through the upstream reference (model2vec, or sentence-transformers on PyTorch) and fails below cosine 0.99. The benchmark workflow runs it before every quality run, so a loading or quantisation bug never counts as a weak Model. (The cheap always-on version for the built-in Model is `tests/parity`, run in normal CI.)
+`parity/check_parity.py` embeds 300 sentences through RAGite and through the upstream reference (model2vec, or sentence-transformers on PyTorch) and fails below cosine 0.99. The benchmark workflow runs it before every quality run, so a loading or quantisation bug never counts as a weak Model. (The cheap always-on version for the built-in Model is `tests/parity`, run in normal CI.)
 
 ## 3. Quality (GitHub Actions, manual)
 
@@ -64,11 +64,11 @@ In the results, hybrid and vector-only nDCG@10 are nearly equal, and Recall@10 o
 
 | FTS query form | queries with FTS hits | FTS-only nDCG@10 | hybrid nDCG@10 / Recall@10 |
 | --- | --- | --- | --- |
-| exact phrase (ragite, REQ-75) | 1 / 300 | 0.0033 | 0.5255 / 0.6638 |
+| exact phrase (RAGite, REQ-75) | 1 / 300 | 0.0033 | 0.5255 / 0.6638 |
 | OR of terms (plain BM25, for comparison) | 300 / 300 | 0.6093 | 0.6200 / 0.7799 |
 
 The FTS leg helps only for queries that quote document text verbatim. Exact-phrase search is kept by design; the numbers measure the vector Model.
 
 ## Known gap
 
-ragite loads only Model2Vec models today (`model2vec-rs`). The transformer finalists need the candle loader (REQ-22) before steps 2-4 can run for them; `build_model.sh` and the workflow will fail for them until then.
+RAGite loads only Model2Vec models today (`model2vec-rs`). The transformer finalists need the candle loader (REQ-22) before steps 2-4 can run for them; `build_model.sh` and the workflow will fail for them until then.

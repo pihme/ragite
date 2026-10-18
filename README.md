@@ -1,7 +1,7 @@
 <h1>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/ragite-readme-lockup-dark.svg">
-    <img alt="ragite" src="docs/assets/ragite-readme-lockup-universal.svg" width="280">
+    <img alt="RAGite" src="docs/assets/ragite-readme-lockup-universal.svg" width="280">
   </picture>
 </h1>
 
@@ -15,7 +15,7 @@ Embeddable, CPU-friendly retrieval (RAG) as a SQLite extension.
 
 ## What it is
 
-ragite is an embeddable retrieval component for retrieval-augmented generation (RAG). It splits text into chunks, computes embeddings on the CPU and finds the best-matching passages with a hybrid search (vector similarity plus full-text BM25), always with a link back to the source document and position. It ships as a loadable SQLite extension, so any application in any language that can load SQLite extensions can use it: SQLite for RAG.
+RAGite is an embeddable retrieval component for retrieval-augmented generation (RAG). It splits text into chunks, computes embeddings on the CPU and finds the best-matching passages with a hybrid search (vector similarity plus full-text BM25), always with a link back to the source document and position. It ships as a loadable SQLite extension, so any application in any language that can load SQLite extensions can use it: SQLite for RAG.
 
 ## Quickstart
 
@@ -73,7 +73,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Security issues: [SECURITY.md](SECURITY.
 
 ## How this project is built
 
-ragite is developed agent-first. AI coding agents write all code,
+RAGite is developed agent-first. AI coding agents write all code,
 tests, and documentation, and review each other's changes, under human
 direction: specs, design decisions, and acceptance based on observed
 behaviour and test results. No human reads the code line by line. This

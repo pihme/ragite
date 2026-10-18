@@ -616,10 +616,11 @@ unsafe fn best_index(vtab: *mut sqlite3_vtab, info_ptr: *mut sqlite3_index_info)
         usage[index].argvIndex = 1;
         usage[index].omit = 1;
         info.idxNum = IDX_MATCH;
-        // A plan that also has a column constraint must be cheaper than MATCH
-        // alone. Otherwise the planner keeps the unconstrained search even
-        // when the other table of a join is already the outer loop, and the
-        // same join returns different rows for different orders (REQ-102).
+        // The unconstrained plan must cost more than one that also consumes a
+        // column constraint. When the costs are equal, SQLite keeps only the
+        // plan with fewer tables, and that plan is the unconstrained MATCH.
+        // An inner join then misses rows that the same join returns as a
+        // CROSS JOIN (REQ-102).
         info.estimatedCost = 1_000_000.0;
         info.estimatedRows = FUSION_DEPTH as i64;
         let mut argv_index = 2;

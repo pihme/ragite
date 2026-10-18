@@ -1,7 +1,8 @@
 //! Shared sqlite3 CLI harness for extension tests.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::SystemTime;
 
 use serde_json::Value;
 
@@ -18,7 +19,48 @@ pub fn extension_path() -> PathBuf {
          (or run `make test`), see CONTRIBUTING.md",
         path.display()
     );
+    assert!(
+        !sources_newer_than(&path),
+        "extension at {} is older than crates/ragite-sqlite/src. \
+         `cargo test` does not rebuild the cdylib; run `cargo build -p ragite-sqlite` first",
+        path.display()
+    );
     path
+}
+
+/// `cargo test` links an rlib and leaves `libragite.so` untouched. A test that
+/// loads the previous build then checks the wrong extension.
+fn sources_newer_than(extension: &Path) -> bool {
+    let built = extension
+        .metadata()
+        .and_then(|meta| meta.modified())
+        .unwrap_or(SystemTime::UNIX_EPOCH);
+    let mut newest = SystemTime::UNIX_EPOCH;
+    newest_mtime(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut newest,
+    );
+    newest > built
+}
+
+fn newest_mtime(path: &Path, newest: &mut SystemTime) {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return;
+    };
+    if meta.is_dir() {
+        let Ok(entries) = std::fs::read_dir(path) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            newest_mtime(&entry.path(), newest);
+        }
+        return;
+    }
+    if let Ok(modified) = meta.modified() {
+        if modified > *newest {
+            *newest = modified;
+        }
+    }
 }
 
 fn extension_file() -> &'static str {

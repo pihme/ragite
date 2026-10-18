@@ -2,7 +2,7 @@
 
 Status: pre-1.0. The cases in this file are implemented and run in CI. Cases carry stable IDs (`TC-n`). Tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-271.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-271 and TC-283.
 
 ## Conventions
 
@@ -577,3 +577,7 @@ Unless a case says otherwise:
 - **TC-267** The SQL block under *Quickstart* in `README.md` runs unchanged in the `sqlite3` shell started in the directory of the built extension, including `load_extension('./libragite')`. The default Model row it prints matches the technical id named in the README, the Document row has Source `manual.md`, and `MATCH` returns at least one Chunk with a Score.
 - **TC-270** On a fresh checkout with Git LFS, the commands in CONTRIBUTING.md (`cargo fetch --locked`, `cargo build -p ragite-sqlite`, `cargo test --workspace`) pass without the Makefile. CI job `fresh-checkout` runs exactly those commands.
 - **TC-271** Every `sql` block in `docs/guide.md` runs in order in one `sqlite3` session started in the directory of the built extension, without an error. Each `-- expect:` line in a block names text that appears in that block's JSON output.
+
+## REQ-104
+
+- **TC-283** After `load_extension`, `vec_version()` returns `v0.1.9`. The scalar functions on that connection are `vec_version`, `vec_debug`, `vec_distance_l2`, `vec_distance_l1`, `vec_distance_hamming`, `vec_distance_cosine`, `vec_length`, `vec_type`, `vec_to_json`, `vec_add`, `vec_sub`, `vec_slice`, `vec_normalize`, `vec_f32`, `vec_bit`, `vec_int8`, `vec_quantize_int8`, and `vec_quantize_binary`. The modules are `vec0` and `vec_each`. `vec_npy_file`, `vec_npy_each`, `vec_static_blob_from_raw`, `vec_static_blobs`, and `vec_static_blob_entries` are absent.

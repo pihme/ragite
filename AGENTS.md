@@ -43,8 +43,8 @@ License: **MIT OR Apache-2.0** (dual, Rust convention; `LICENSE-MIT`, `LICENSE-A
 
 ### Dependabot
 
-- This repo has no `.github/dependabot.yml`. If a dependency update is committed: runtime dependencies `fix(deps):` (patch release), dev dependencies `chore(deps-dev):`, GitHub Actions `ci(deps):`.
-- **Never turn a dependency update into `feat!:`** or reword its title. A major dependency update is still `fix(deps)` / `chore(deps-dev)`. If it forces a breaking change on users (for example a new minimum runtime), that is a separate, deliberate commit after the maintainer decides.
+- `.github/dependabot.yml` opens the updates. Workspace Cargo (`/`) is `fix(deps):` and bumps patch, because those crates are release paths. The fuzz Cargo workspace (`/fuzz`), the Go language tests (`/tests/languages/go`), and the bench pip dependencies (`/bench`) are `chore(deps):` and are not shipped. GitHub Actions are `ci(deps):`.
+- **Never turn a dependency update into `feat!:`** or reword its title. A major update keeps the prefix from `.github/dependabot.yml`. If it forces a breaking change on users (for example a new minimum runtime), that is a separate, deliberate commit after the maintainer decides.
 - **Merge Dependabot PRs when CI is green** (squash, keep the Dependabot title). If one conflicts, comment `@dependabot rebase`. If CI is red and the fix is not obvious, leave the PR open and open an issue.
 
 ### Third-party notices

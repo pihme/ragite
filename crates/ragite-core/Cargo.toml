@@ -4,7 +4,7 @@ version = "0.3.3"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Chunking and embedding for ragite, with no SQLite dependency"
+description = "Chunking and embedding for RAGite, with no SQLite dependency"
 publish = false
 
 [features]

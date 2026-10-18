@@ -4,7 +4,7 @@ This file is for the coding agent working in this repo. Read it at the start of 
 
 ## What this repo is
 
-**ragite** is embeddable, CPU-friendly retrieval (RAG) as a SQLite extension. Spec and decisions: `SPEC.md`. User docs: `README.md`.
+**RAGite** is embeddable, CPU-friendly retrieval (RAG) as a SQLite extension. Spec and decisions: `SPEC.md`. User docs: `README.md`.
 
 License: **MIT OR Apache-2.0** (dual, Rust convention; `LICENSE-MIT`, `LICENSE-APACHE`; `license = "MIT OR Apache-2.0"` in `Cargo.toml`). MIT copyright line: "ragite contributors"; keep it that way. Not PolyForm.
 

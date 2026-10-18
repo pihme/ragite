@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Quality run for one Model through ragite's own path (REQ-92).
+"""Quality run for one Model through RAGite's own path (REQ-92).
 
 Loads an extension built with that Model (see bench/README.md), indexes a
 retrieval dataset through `INSERT`, and scores nDCG@10 and Recall@10 in two
 modes:
 
-  hybrid  -- `docs_chunks MATCH q` (sqlite-vec + FTS5, the ragite default)
+  hybrid  -- `docs_chunks MATCH q` (sqlite-vec + FTS5, the RAGite default)
   vector  -- KNN on `docs_vec` with `ragite_embed(..., 'query')` only
 
 A document's score is the best rank of any of its Chunks. Output is one JSON
@@ -41,7 +41,7 @@ def load_mteb(name: str, revision: str | None, max_docs: int | None):
         if float(r["score"]) > 0:
             rel.setdefault(str(r["query-id"]), set()).add(str(r["corpus-id"]))
     docs = [(str(d["_id"]), ((d.get("title") or "") + "\n\n" + d["text"]).strip()) for d in corpus]
-    # ragite rejects empty text; FiQA has corpus entries with no title and no text.
+    # RAGite rejects empty text; FiQA has corpus entries with no title and no text.
     empty = sum(1 for d in docs if not d[1])
     docs = [d for d in docs if d[1]]
     if max_docs:  # keep every relevant doc, then fill up

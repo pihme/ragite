@@ -238,7 +238,12 @@ SELECT length(ragite_embed('docs', 'hello world', 'passage')) AS bytes,
 
 Uses:
 
-**Similarity between two texts.** The extension also loads sqlite-vec's scalar functions, such as `vec_distance_cosine` (0 = same direction):
+**Similarity between two texts.** Loading the extension registers sqlite-vec 0.1.9. `vec_version()` returns that version. Its scalar functions, including `vec_distance_cosine` (0 means the same direction), and the modules `vec0` and `vec_each` are available for your own tables. `vec_npy_file`, `vec_npy_each`, and the static-blob helpers are absent.
+
+```sql
+SELECT vec_version() AS version;
+-- expect: "version":"v0.1.9"
+```
 
 ```sql
 SELECT round(vec_distance_cosine(ragite_embed('docs', 'reset my password', 'query'),

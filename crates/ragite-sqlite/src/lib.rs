@@ -20,6 +20,13 @@ unsafe extern "C" {
 }
 
 /// Entry point for `SELECT load_extension('ragite')`.
+///
+/// # Safety
+///
+/// `db`, `pz_err`, and `p_api` must be the pointers SQLite passes to this
+/// entry point. `db` is the connection that is loading the extension.
+/// `pz_err` is null or the slot where SQLite expects an error string.
+/// `p_api` is SQLite's API routine table.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sqlite3_ragite_init(
     db: *mut sqlite3,

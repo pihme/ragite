@@ -37,7 +37,7 @@ pub unsafe extern "C" fn sqlite3_ragite_init(
     match result {
         Ok(rc) => rc,
         Err(_) => {
-            set_pz(pz_err, "ragite failed while loading");
+            set_pz(pz_err, "RAGite failed while loading");
             SQLITE_ERROR
         }
     }
@@ -49,7 +49,7 @@ unsafe fn init(
     p_api: *mut sqlite3_api_routines,
 ) -> c_int {
     if let Err(err) = unsafe { libsqlite3_sys::rusqlite_extension_init2(p_api) } {
-        set_pz(pz_err, &format!("ragite could not bind SQLite: {err}"));
+        set_pz(pz_err, &format!("RAGite could not bind SQLite: {err}"));
         return SQLITE_ERROR;
     }
     let rc = unsafe { sqlite3_vec_init(db, pz_err, p_api.cast()) };
@@ -67,7 +67,7 @@ unsafe fn init(
         )
     };
     if rc != SQLITE_OK {
-        set_pz(pz_err, "ragite could not register its module");
+        set_pz(pz_err, "RAGite could not register its module");
         return rc;
     }
     if let Err(err) = func::register(db) {

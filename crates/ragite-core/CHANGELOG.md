@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.4](https://github.com/pihme/ragite/compare/ragite-core/v0.3.3...ragite-core/v0.3.4) - 2026-10-18
+## [1.0.0](https://github.com/pihme/ragite/compare/ragite-core/v0.3.3...ragite-core/v1.0.0) - 2026-10-18
 
 ### Fixed
 
-- name RAGite in error messages and docs before 1.0 ([#86](https://github.com/pihme/ragite/pull/86))
+- name RAGite in error messages and docs ([#86](https://github.com/pihme/ragite/pull/86))
 
 ## [0.3.3](https://github.com/pihme/ragite/compare/ragite-core/v0.3.2...ragite-core/v0.3.3) - 2026-10-18
 

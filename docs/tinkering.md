@@ -171,7 +171,7 @@ None of these can be set from SQL or at `CREATE VIRTUAL TABLE`. Each one is a co
 Points that tend to surprise people:
 
 - **There is no score cutoff, and the vector side always returns neighbours.** KNN returns the `FUSION_DEPTH` nearest Chunks whatever they contain, so a `MATCH` on a table with at least 50 Chunks returns 50 rows even for a query that matches no word. `tc_27_same_scores_and_fixed_depth` in `tests/search.rs` checks exactly that.
-- **`LIMIT` and other `WHERE` filters apply after the fusion.** `best_index` consumes only the `MATCH` constraint and does not use `LIMIT`. Both lists are always fetched at full depth and fused, and SQLite then applies `LIMIT`, `source = '…'`, `JOIN`s, and `ORDER BY` to those rows. So `WHERE docs MATCH 'q' AND source = 'a.md'` can return fewer rows than exist for `a.md`, or none, when that source's Chunks are not among the top 50 of either list. To filter before ranking, you would have to push the filter into `vector_ids`/`fts_ids`. That is a code and spec change.
+- **`=` and `IN` select Chunks before the depth cut (REQ-99).** `best_index` consumes those constraints with `MATCH` and records the columns in `idxStr`. `chunk_id_restriction` turns them into Chunk ids. `vector_ids` passes that set into the KNN as `rowid IN`, and `fts_ids` applies it before `LIMIT`. A `rowid` equality keeps the search plan. A join key on a RAGite column is one of those constraints, and the constrained plan costs less than `MATCH` alone so an inner join uses it (REQ-102). `score` (REQ-100), `LIMIT`, `OFFSET`, and `ORDER BY` (REQ-101), a predicate that names only another table (REQ-102), and `LIKE` and the inequalities (REQ-103) stay on the fused rows. The caller-facing account is in the user guide, section 3, "Narrowing a search". `tests/search.rs` checks this as TC-272 through TC-282.
 - **Changing `create_shadows` affects only new tables.** The tokenizer and the distance metric are fixed into each table when it is created. Existing databases keep what they were created with.
 - **Changing `RRF_K` changes every expected Score in the tests.** `fusion.rs` unit tests and `tests/search.rs` assert literal values such as `2.0 / 61.0`.
 
@@ -190,7 +190,7 @@ Everything SQL can do on top of the returned rows:
   LIMIT 5;
   ```
 
-  This re-orders only the at most 50 fused rows. It cannot bring back a Chunk that fell outside the depth.
+  This re-orders only the at most 50 fused rows. It cannot bring back a Chunk that fell outside the depth. A `=` or `IN` on a RAGite column is applied earlier, so the 50 are chosen inside that set.
 - **Shape the input.** Splitting documents differently before `INSERT`, or choosing `text/markdown` over `text/plain` so headings become their own Chunks, changes what each Chunk contains, and so what each ranking sees.
 - **Use your own vectors next to RAGite.** `ragite_embed(table, text, role)` and `ragite_embed_model(id, text, role)` return the same vectors RAGite stores (REQ-17, REQ-69), so an application can keep its own vector table and combine it with `MATCH` results in SQL. RAGite's own shadow tables (`<name>_vec`, `<name>_fts`, `<name>_chunk_rows`) are internal: their shape is not a public interface, and writing to them breaks the consistency between them.
 

@@ -1,11 +1,50 @@
 //! Shared sqlite3 CLI harness for extension tests.
 
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::SystemTime;
 
 use serde_json::Value;
 
 pub const HELLO_SHA: &str = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+
+/// Cargo hides output from a passing test. This runs before the harness
+/// captures output, so the SQLite version is visible at the start of each
+/// test binary.
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "ios"
+))]
+#[used]
+#[cfg_attr(
+    any(target_os = "linux", target_os = "android"),
+    unsafe(link_section = ".init_array")
+)]
+#[cfg_attr(
+    any(target_os = "macos", target_os = "ios"),
+    unsafe(link_section = "__DATA,__mod_init_func")
+)]
+static LOG_SQLITE_VERSION: unsafe extern "C" fn() = log_sqlite_version;
+
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "ios"
+))]
+unsafe extern "C" fn log_sqlite_version() {
+    let version = Command::new("sqlite3")
+        .arg("-version")
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .unwrap_or_else(|err| format!("sqlite3 not on PATH ({err})"));
+    let mut err = std::io::stderr();
+    let _ = writeln!(err, "sqlite3 version: {version}");
+    let _ = err.flush();
+}
 
 pub fn extension_path() -> PathBuf {
     let mut path = std::env::current_exe().expect("test executable");
@@ -18,7 +57,48 @@ pub fn extension_path() -> PathBuf {
          (or run `make test`), see CONTRIBUTING.md",
         path.display()
     );
+    assert!(
+        !sources_newer_than(&path),
+        "extension at {} is older than crates/ragite-sqlite/src. \
+         `cargo test` does not rebuild the cdylib; run `cargo build -p ragite-sqlite` first",
+        path.display()
+    );
     path
+}
+
+/// `cargo test` links an rlib and leaves `libragite.so` untouched. A test that
+/// loads the previous build then checks the wrong extension.
+fn sources_newer_than(extension: &Path) -> bool {
+    let built = extension
+        .metadata()
+        .and_then(|meta| meta.modified())
+        .unwrap_or(SystemTime::UNIX_EPOCH);
+    let mut newest = SystemTime::UNIX_EPOCH;
+    newest_mtime(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut newest,
+    );
+    newest > built
+}
+
+fn newest_mtime(path: &Path, newest: &mut SystemTime) {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return;
+    };
+    if meta.is_dir() {
+        let Ok(entries) = std::fs::read_dir(path) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            newest_mtime(&entry.path(), newest);
+        }
+        return;
+    }
+    if let Ok(modified) = meta.modified() {
+        if modified > *newest {
+            *newest = modified;
+        }
+    }
 }
 
 fn extension_file() -> &'static str {

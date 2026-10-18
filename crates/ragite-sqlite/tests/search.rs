@@ -459,3 +459,518 @@ fn tc_251_to_254_rowid_equality_is_a_unique_lookup() {
         "knn join plan: {join_plan}"
     );
 }
+
+/// D from SPEC section 8.1. An exact-query Document fills each fusion slot.
+const FUSION_DEPTH: usize = 50;
+
+#[test]
+fn tc_272_source_equality_searches_inside_that_source() {
+    let query = "filtertoken alpha";
+    let kept = "filtertoken alpha sits inside a longer paragraph";
+    let mut script = String::from("CREATE VIRTUAL TABLE docs USING ragite;\n");
+    for _ in 0..FUSION_DEPTH {
+        script.push_str(&format!(
+            "INSERT INTO docs(text, source) VALUES ('{query}', 'other');\n"
+        ));
+    }
+    script.push_str(&format!(
+        "INSERT INTO docs(text, source) VALUES ('{kept}', 'keep');\n"
+    ));
+    script.push_str(&format!(
+        "SELECT source FROM docs WHERE docs MATCH '{query}';
+         SELECT source, score FROM docs WHERE docs MATCH '{query}' AND source = 'keep';
+         SELECT source, chunk, score FROM docs_chunks
+           WHERE docs_chunks MATCH '{query}' AND source = 'keep';
+         CREATE VIRTUAL TABLE alone USING ragite;
+         INSERT INTO alone(text) VALUES ('{kept}');
+         SELECT score FROM alone WHERE alone MATCH '{query}';"
+    ));
+    let rows = ok(&script);
+    let rows = rows.as_array().unwrap();
+    let unfiltered: Vec<_> = rows
+        .iter()
+        .filter(|row| row.get("chunk").is_none() && row.get("score").is_none())
+        .collect();
+    assert_eq!(unfiltered.len(), FUSION_DEPTH);
+    assert!(unfiltered.iter().all(|row| row["source"] == "other"));
+
+    let filtered_docs: Vec<_> = rows
+        .iter()
+        .filter(|row| {
+            row.get("source").is_some() && row.get("score").is_some() && row.get("chunk").is_none()
+        })
+        .collect();
+    assert_eq!(filtered_docs.len(), 1);
+    assert_eq!(filtered_docs[0]["source"], "keep");
+
+    let filtered_chunks: Vec<_> = rows
+        .iter()
+        .filter(|row| row.get("chunk").is_some())
+        .collect();
+    assert_eq!(filtered_chunks.len(), 1);
+    assert_eq!(filtered_chunks[0]["source"], "keep");
+    assert_eq!(filtered_chunks[0]["chunk"], kept);
+
+    let alone = rows.last().unwrap()["score"].as_f64().expect("alone score");
+    assert_score(alone, 2.0 / 61.0);
+    assert_score(
+        filtered_docs[0]["score"].as_f64().expect("doc score"),
+        alone,
+    );
+    assert_score(
+        filtered_chunks[0]["score"].as_f64().expect("chunk score"),
+        alone,
+    );
+}
+
+#[test]
+fn tc_273_format_hash_and_text_narrow_the_search() {
+    let query = "filtertoken beta";
+    let kept = "filtertoken beta sits inside a longer paragraph";
+    let mut script = String::from("CREATE VIRTUAL TABLE docs USING ragite;\n");
+    for _ in 0..FUSION_DEPTH {
+        script.push_str(&format!(
+            "INSERT INTO docs(text, source, format) VALUES ('{query}', 'keep', 'text/html');\n"
+        ));
+    }
+    script.push_str(&format!(
+        "INSERT INTO docs(text, source, format) VALUES ('{kept}', 'keep', 'text/plain');\n"
+    ));
+    script.push_str(&format!(
+        "SELECT format FROM docs WHERE docs MATCH '{query}' AND source = 'keep';
+         SELECT format, score FROM docs
+           WHERE docs MATCH '{query}' AND source = 'keep' AND format = 'text/plain';
+         SELECT format, score FROM docs
+           WHERE docs MATCH '{query}'
+             AND hash = (SELECT hash FROM docs WHERE format = 'text/plain');
+         SELECT format, score FROM docs
+           WHERE docs MATCH '{query}'
+             AND text = (SELECT text FROM docs WHERE format = 'text/plain');
+         SELECT format FROM docs
+           WHERE docs MATCH '{query}' AND format = 'text/html' AND source = 'keep';
+         CREATE VIRTUAL TABLE alone USING ragite;
+         INSERT INTO alone(text, format) VALUES ('{kept}', 'text/plain');
+         SELECT score FROM alone WHERE alone MATCH '{query}';"
+    ));
+    let rows = ok(&script);
+    let rows = rows.as_array().unwrap();
+    let source_only: Vec<_> = rows
+        .iter()
+        .filter(|row| row.get("score").is_none() && row["format"] == "text/html")
+        .collect();
+    // The first SELECT is the source-only search. Later the html search repeats those formats.
+    assert!(source_only.len() >= FUSION_DEPTH);
+    assert!(
+        rows.iter()
+            .take(FUSION_DEPTH)
+            .all(|row| row["format"] == "text/html")
+    );
+    assert!(
+        rows.iter()
+            .take(FUSION_DEPTH)
+            .all(|row| row.get("score").is_none())
+    );
+
+    let narrowed: Vec<_> = rows
+        .iter()
+        .filter(|row| row.get("score").is_some() && row["format"] == "text/plain")
+        .collect();
+    assert_eq!(narrowed.len(), 3, "plain format, hash, and text searches");
+    let alone = rows.last().unwrap()["score"].as_f64().expect("alone score");
+    assert_score(alone, 2.0 / 61.0);
+    for row in narrowed {
+        assert_score(row["score"].as_f64().expect("score"), alone);
+    }
+
+    let html: Vec<_> = rows
+        .iter()
+        .skip(FUSION_DEPTH)
+        .filter(|row| row.get("score").is_none() && row["format"] == "text/html")
+        .collect();
+    assert_eq!(html.len(), FUSION_DEPTH);
+    assert!(
+        rows.iter()
+            .all(|row| row["format"] != "text/plain" || row.get("score").is_some())
+    );
+}
+
+#[test]
+fn tc_274_doc_id_rowid_and_source_in_narrow_the_search() {
+    let query = "filtertoken gamma";
+    let kept = "filtertoken gamma sits inside a longer paragraph";
+    let also = "filtertoken gamma appears among other words";
+    let mut script = String::from(
+        "CREATE VIRTUAL TABLE docs USING ragite;
+         CREATE VIRTUAL TABLE pair USING ragite;\n",
+    );
+    for _ in 0..FUSION_DEPTH {
+        script.push_str(&format!(
+            "INSERT INTO docs(text, source) VALUES ('{query}', 'other');\n"
+        ));
+    }
+    script.push_str(&format!(
+        "INSERT INTO docs(text, source) VALUES ('{kept}', 'keep');
+         INSERT INTO docs(text, source) VALUES ('{also}', 'also');
+         INSERT INTO pair(text, source) VALUES ('{kept}', 'keep');
+         INSERT INTO pair(text, source) VALUES ('{also}', 'also');
+         SELECT 'open' AS q, source FROM docs WHERE docs MATCH '{query}';
+         SELECT 'doc' AS q, source, score FROM docs
+           WHERE docs MATCH '{query}'
+             AND doc_id = (SELECT doc_id FROM docs WHERE source = 'keep');
+         SELECT 'row' AS q, source, score FROM docs
+           WHERE docs MATCH '{query}'
+             AND rowid = (SELECT doc_id FROM docs WHERE source = 'keep');
+         SELECT 'inn' AS q, source, score FROM docs
+           WHERE docs MATCH '{query}' AND source IN ('keep', 'also');
+         SELECT 'pair' AS q, source, score FROM pair WHERE pair MATCH '{query}';"
+    ));
+    let rows = ok(&script);
+    let rows = rows.as_array().unwrap();
+    let unfiltered: Vec<_> = rows.iter().filter(|row| row["q"] == "open").collect();
+    assert_eq!(unfiltered.len(), FUSION_DEPTH);
+    assert!(unfiltered.iter().all(|row| row["source"] == "other"));
+
+    for label in ["doc", "row"] {
+        let hit: Vec<_> = rows.iter().filter(|row| row["q"] == label).collect();
+        assert_eq!(hit.len(), 1, "{label}");
+        assert_eq!(hit[0]["source"], "keep");
+        assert_score(hit[0]["score"].as_f64().expect("score"), 2.0 / 61.0);
+    }
+
+    let inn: Vec<_> = rows.iter().filter(|row| row["q"] == "inn").collect();
+    let pair: Vec<_> = rows.iter().filter(|row| row["q"] == "pair").collect();
+    assert_eq!(inn.len(), 2);
+    assert_eq!(pair.len(), 2);
+    for wanted in ["keep", "also"] {
+        let from_pair = pair
+            .iter()
+            .find(|row| row["source"] == wanted)
+            .expect(wanted);
+        let from_in = inn
+            .iter()
+            .find(|row| row["source"] == wanted)
+            .expect(wanted);
+        assert_score(
+            from_in["score"].as_f64().expect("in score"),
+            from_pair["score"].as_f64().expect("pair score"),
+        );
+    }
+
+    let explain = plan_text(&format!(
+        "{script}
+         EXPLAIN QUERY PLAN SELECT source FROM docs
+           WHERE docs MATCH '{query}' AND rowid = (SELECT doc_id FROM docs WHERE source = 'keep');"
+    ));
+    assert!(
+        explain.contains("INDEX 1:"),
+        "rowid with MATCH stays on the search plan: {explain}"
+    );
+}
+
+#[test]
+fn tc_275_chunk_columns_and_meta_json_narrow_the_search() {
+    let query = "filtertoken delta";
+    let body = "filtertoken delta sits inside a longer paragraph";
+    let heading = "# Kept";
+    let mut script = String::from("CREATE VIRTUAL TABLE docs USING ragite;\n");
+    for _ in 0..FUSION_DEPTH {
+        script.push_str(&format!(
+            "INSERT INTO docs(text, source) VALUES ('{query}', 'other');\n"
+        ));
+    }
+    script.push_str(&format!(
+        "INSERT INTO docs(text, source, format) VALUES (
+            '{heading}' || char(10) || char(10) || '{body}', 'keep', 'text/markdown');
+         SELECT 'open' AS q, chunk FROM docs_chunks WHERE docs_chunks MATCH '{query}';
+         SELECT 'chunk' AS q, chunk, score FROM docs_chunks
+           WHERE docs_chunks MATCH '{query}'
+             AND chunk = (SELECT chunk FROM docs_chunks WHERE heading_path = '[\"Kept\"]');
+         SELECT 'span' AS q, chunk, score FROM docs_chunks
+           WHERE docs_chunks MATCH '{query}'
+             AND start = (SELECT start FROM docs_chunks WHERE heading_path = '[\"Kept\"]')
+             AND \"end\" = (SELECT \"end\" FROM docs_chunks WHERE heading_path = '[\"Kept\"]');
+         SELECT 'path' AS q, chunk, score FROM docs_chunks
+           WHERE docs_chunks MATCH '{query}' AND heading_path = '[\"Kept\"]';
+         SELECT 'badstart' AS q, chunk FROM docs_chunks
+           WHERE docs_chunks MATCH '{query}'
+             AND start = (SELECT start FROM docs_chunks WHERE heading_path = '[\"Kept\"]') + 1
+             AND \"end\" = (SELECT \"end\" FROM docs_chunks WHERE heading_path = '[\"Kept\"]');
+         SELECT 'badend' AS q, chunk FROM docs_chunks
+           WHERE docs_chunks MATCH '{query}'
+             AND start = (SELECT start FROM docs_chunks WHERE heading_path = '[\"Kept\"]')
+             AND \"end\" = (SELECT \"end\" FROM docs_chunks WHERE heading_path = '[\"Kept\"]') + 1;
+         SELECT 'root' AS q, chunk FROM docs_chunks
+           WHERE docs_chunks MATCH '{query}' AND heading_path = '[]';
+         SELECT 'doc' AS q, chunk, score FROM docs_chunks
+           WHERE docs_chunks MATCH '{query}'
+             AND doc_id = (SELECT doc_id FROM docs WHERE source = 'keep');
+         SELECT 'crow' AS q, chunk, score FROM docs_chunks
+           WHERE docs_chunks MATCH '{query}'
+             AND rowid = (SELECT rowid FROM docs_chunks WHERE heading_path = '[\"Kept\"]');"
+    ));
+    let docling = format!(
+        "{{\"schema_name\":\"DoclingDocument\",\"texts\":[{{\"self_ref\":\"#/texts/0\",\"label\":\"text\",\"text\":\"{body}\"}}],\"body\":{{\"children\":[{{\"$ref\":\"#/texts/0\"}}]}}}}"
+    );
+    script.push_str("CREATE VIRTUAL TABLE papers USING ragite;\n");
+    for _ in 0..FUSION_DEPTH {
+        script.push_str(&format!(
+            "INSERT INTO papers(text, source) VALUES ('{query}', 'other');\n"
+        ));
+    }
+    script.push_str(&format!(
+        "INSERT INTO papers(text, source, format) VALUES (
+            '{docling}', 'keep', 'application/vnd.docling.document+json');
+         SELECT 'dopen' AS q, chunk FROM papers_chunks WHERE papers_chunks MATCH '{query}';
+         SELECT 'meta' AS q, chunk, score FROM papers_chunks
+           WHERE papers_chunks MATCH '{query}'
+             AND meta_json = (
+               SELECT meta_json FROM papers_chunks WHERE chunk = '{body}'
+             );
+         SELECT 'othermeta' AS q, chunk FROM papers_chunks
+           WHERE papers_chunks MATCH '{query}' AND meta_json = '{{\"page\":9}}';"
+    ));
+    let rows = ok(&script);
+    let rows = rows.as_array().unwrap();
+    let open: Vec<_> = rows.iter().filter(|row| row["q"] == "open").collect();
+    assert_eq!(open.len(), FUSION_DEPTH);
+    assert!(
+        open.iter()
+            .all(|row| row["chunk"] != body && row["chunk"] != heading)
+    );
+    for label in ["chunk", "span", "path"] {
+        let hit: Vec<_> = rows.iter().filter(|row| row["q"] == label).collect();
+        assert_eq!(hit.len(), 1, "{label}");
+        assert_eq!(hit[0]["chunk"], body);
+        assert_score(hit[0]["score"].as_f64().expect("score"), 2.0 / 61.0);
+    }
+    let doc: Vec<_> = rows.iter().filter(|row| row["q"] == "doc").collect();
+    assert!(
+        doc.iter()
+            .all(|row| row["chunk"] == body || row["chunk"] == heading)
+    );
+    let doc_body = doc
+        .iter()
+        .find(|row| row["chunk"] == body)
+        .expect("doc body");
+    assert_score(doc_body["score"].as_f64().expect("score"), 2.0 / 61.0);
+    let crow: Vec<_> = rows.iter().filter(|row| row["q"] == "crow").collect();
+    assert_eq!(crow.len(), 1);
+    assert_eq!(crow[0]["chunk"], body);
+    assert_score(crow[0]["score"].as_f64().expect("score"), 2.0 / 61.0);
+    for label in ["badstart", "badend"] {
+        let hit: Vec<_> = rows.iter().filter(|row| row["q"] == label).collect();
+        assert!(hit.is_empty(), "{label} returned {hit:?}");
+    }
+    let root: Vec<_> = rows.iter().filter(|row| row["q"] == "root").collect();
+    assert!(root.iter().all(|row| row["chunk"] != body));
+
+    let dopen: Vec<_> = rows.iter().filter(|row| row["q"] == "dopen").collect();
+    assert_eq!(dopen.len(), FUSION_DEPTH);
+    assert!(dopen.iter().all(|row| row["chunk"] != body));
+    let meta: Vec<_> = rows.iter().filter(|row| row["q"] == "meta").collect();
+    assert_eq!(meta.len(), 1);
+    assert_eq!(meta[0]["chunk"], body);
+    assert_score(meta[0]["score"].as_f64().expect("score"), 2.0 / 61.0);
+    let other: Vec<_> = rows.iter().filter(|row| row["q"] == "othermeta").collect();
+    assert!(other.iter().all(|row| row["chunk"] != body));
+}
+
+fn buried_keep(query: &str, kept: &str) -> String {
+    let mut script = String::from("CREATE VIRTUAL TABLE docs USING ragite;\n");
+    for _ in 0..FUSION_DEPTH {
+        script.push_str(&format!(
+            "INSERT INTO docs(text, source) VALUES ('{query}', 'other');\n"
+        ));
+    }
+    script.push_str(&format!(
+        "INSERT INTO docs(text, source) VALUES ('{kept}', 'keep');\n"
+    ));
+    script
+}
+
+#[test]
+fn tc_281_missing_source_empty_match_and_plain_scan() {
+    let query = "filtertoken epsilon";
+    let kept = "filtertoken epsilon sits inside a longer paragraph";
+    let mut script = buried_keep(query, kept);
+    script.push_str(&format!(
+        "SELECT 'miss' AS q, source FROM docs WHERE docs MATCH '{query}' AND source = 'missing';
+         SELECT 'empty' AS q, source FROM docs WHERE docs MATCH '' AND source = 'keep';
+         SELECT 'scan' AS q, source, text FROM docs WHERE source = 'keep';"
+    ));
+    let rows = ok(&script);
+    let rows = rows.as_array().unwrap();
+    assert!(rows.iter().all(|row| row["q"] != "miss"));
+    assert!(rows.iter().all(|row| row["q"] != "empty"));
+    let scan: Vec<_> = rows.iter().filter(|row| row["q"] == "scan").collect();
+    assert_eq!(scan.len(), 1);
+    assert_eq!(scan[0]["source"], "keep");
+    assert_eq!(scan[0]["text"], kept);
+}
+
+#[test]
+fn tc_277_score_comparison_does_not_reach_outside_the_depth() {
+    let query = "filtertoken zeta";
+    let kept = "filtertoken zeta sits inside a longer paragraph";
+    let mut script = buried_keep(query, kept);
+    script.push_str(&format!(
+        "SELECT source FROM docs WHERE docs MATCH '{query}' AND score > 0;"
+    ));
+    let rows = ok(&script);
+    let rows = rows.as_array().unwrap();
+    assert!(!rows.is_empty());
+    assert!(rows.iter().all(|row| row["source"] != "keep"));
+}
+
+#[test]
+fn tc_278_limit_offset_and_order_by_do_not_change_scores() {
+    let query = "filtertoken eta";
+    let kept = "filtertoken eta sits inside a longer paragraph";
+    let mut script = buried_keep(query, kept);
+    script.push_str(&format!(
+        "SELECT 'all' AS q, doc_id, source, score FROM docs WHERE docs MATCH '{query}';
+         SELECT 'one' AS q, doc_id, score FROM docs WHERE docs MATCH '{query}' LIMIT 1;
+         SELECT 'two' AS q, doc_id, score FROM docs WHERE docs MATCH '{query}' LIMIT 1 OFFSET 1;
+         SELECT 'ord' AS q, doc_id, source FROM docs WHERE docs MATCH '{query}' ORDER BY source;"
+    ));
+    let rows = ok(&script);
+    let rows = rows.as_array().unwrap();
+    let all: Vec<_> = rows.iter().filter(|row| row["q"] == "all").collect();
+    assert_eq!(all.len(), FUSION_DEPTH);
+    assert!(all.iter().all(|row| row["source"] != "keep"));
+    let one: Vec<_> = rows.iter().filter(|row| row["q"] == "one").collect();
+    let two: Vec<_> = rows.iter().filter(|row| row["q"] == "two").collect();
+    assert_eq!(one.len(), 1);
+    assert_eq!(two.len(), 1);
+    assert_eq!(one[0]["doc_id"], all[0]["doc_id"]);
+    assert_score(
+        one[0]["score"].as_f64().expect("limit score"),
+        all[0]["score"].as_f64().expect("full score"),
+    );
+    assert_eq!(two[0]["doc_id"], all[1]["doc_id"]);
+    assert_score(
+        two[0]["score"].as_f64().expect("offset score"),
+        all[1]["score"].as_f64().expect("full score"),
+    );
+    let ordered: Vec<_> = rows.iter().filter(|row| row["q"] == "ord").collect();
+    let mut ordered_ids: Vec<_> = ordered
+        .iter()
+        .map(|row| row["doc_id"].as_i64().unwrap())
+        .collect();
+    let mut all_ids: Vec<_> = all
+        .iter()
+        .map(|row| row["doc_id"].as_i64().unwrap())
+        .collect();
+    ordered_ids.sort();
+    all_ids.sort();
+    assert_eq!(ordered_ids, all_ids);
+}
+
+fn pages_for(query: &str, kept: &str) -> String {
+    let mut script = buried_keep(query, kept);
+    script.push_str(
+        "CREATE TABLE pages(path TEXT, project TEXT);
+         INSERT INTO pages(path, project) VALUES ('keep', 'wiki'), ('x1', 'a'), ('x2', 'b');\n",
+    );
+    script
+}
+
+fn assert_keep_at_alone_score(rows: &[serde_json::Value], label: &str) {
+    let hit: Vec<_> = rows.iter().filter(|row| row["q"] == label).collect();
+    let kept: Vec<_> = hit.iter().filter(|row| row["source"] == "keep").collect();
+    assert_eq!(kept.len(), 1, "{label}: {hit:?}");
+    assert_score(kept[0]["score"].as_f64().expect("score"), 2.0 / 61.0);
+}
+
+#[test]
+fn tc_279_a_join_key_narrows_the_search() {
+    let query = "filtertoken theta";
+    let kept = "filtertoken theta sits inside a longer paragraph";
+    let mut script = pages_for(query, kept);
+    script.push_str(&format!(
+        "SELECT 'inner' AS q, docs.source AS source, docs.score AS score
+           FROM docs JOIN pages ON pages.path = docs.source
+           WHERE pages.project = 'wiki' AND docs MATCH '{query}';"
+    ));
+    let rows = ok(&script);
+    let rows = rows.as_array().unwrap();
+    assert_keep_at_alone_score(rows, "inner");
+}
+
+#[test]
+fn tc_276_join_order_does_not_change_a_join_key() {
+    let query = "filtertoken kappa";
+    let kept = "filtertoken kappa sits inside a longer paragraph";
+    let setup = pages_for(query, kept);
+    let mut script = setup.clone();
+    script.push_str(&format!(
+        "SELECT 'cross' AS q, docs.source AS source, docs.score AS score
+           FROM pages CROSS JOIN docs ON docs.source = pages.path
+           WHERE pages.project = 'wiki' AND docs MATCH '{query}';
+         SELECT 'left' AS q, docs.source AS source, docs.score AS score
+           FROM pages LEFT JOIN docs
+             ON docs.source = pages.path AND docs MATCH '{query}';"
+    ));
+    let rows = ok(&script);
+    let rows = rows.as_array().unwrap();
+    assert_keep_at_alone_score(rows, "cross");
+    assert_keep_at_alone_score(rows, "left");
+
+    let plan = plan_text(&format!(
+        "{setup}
+         EXPLAIN QUERY PLAN
+         SELECT docs.source FROM docs JOIN pages ON pages.path = docs.source
+           WHERE pages.project = 'wiki' AND docs MATCH '{query}';"
+    ));
+    assert!(
+        plan.contains("INDEX 1:2"),
+        "join key stays on the search plan: {plan}"
+    );
+
+    let indexed = plan_text(&format!(
+        "{setup}
+         CREATE INDEX pages_project ON pages(project);
+         EXPLAIN QUERY PLAN
+         SELECT docs.source FROM docs JOIN pages ON pages.path = docs.source
+           WHERE pages.project = 'wiki' AND docs MATCH '{query}';"
+    ));
+    assert!(
+        indexed.contains("INDEX 1:2"),
+        "an index on the other table still pushes the join key: {indexed}"
+    );
+}
+
+#[test]
+fn tc_282_a_predicate_only_on_the_other_table_does_not_narrow() {
+    let query = "filtertoken lambda";
+    let kept = "filtertoken lambda sits inside a longer paragraph";
+    let mut script = pages_for(query, kept);
+    script.push_str(&format!(
+        "SELECT 'on' AS q, docs.source AS source FROM docs
+           JOIN pages ON pages.project = 'wiki'
+           WHERE docs MATCH '{query}';
+         SELECT 'where' AS q, docs.source AS source FROM docs, pages
+           WHERE docs MATCH '{query}' AND pages.project = 'wiki';"
+    ));
+    let rows = ok(&script);
+    let rows = rows.as_array().unwrap();
+    assert!(rows.iter().all(|row| row["source"] != "keep"));
+    assert!(!rows.is_empty());
+}
+
+#[test]
+fn tc_280_like_and_inequalities_do_not_reach_outside_the_depth() {
+    let query = "filtertoken iota";
+    let kept = "filtertoken iota sits inside a longer paragraph";
+    let mut script = buried_keep(query, kept);
+    script.push_str(&format!(
+        "SELECT 'like' AS q, source FROM docs WHERE docs MATCH '{query}' AND source LIKE 'keep%';
+         SELECT 'ne' AS q, source FROM docs WHERE docs MATCH '{query}' AND source != 'other';
+         SELECT 'gt' AS q, source FROM docs WHERE docs MATCH '{query}' AND rowid > 0;"
+    ));
+    let rows = ok(&script);
+    let rows = rows.as_array().unwrap();
+    assert!(rows.iter().all(|row| row["source"] != "keep"));
+    let above: Vec<_> = rows.iter().filter(|row| row["q"] == "gt").collect();
+    assert_eq!(above.len(), FUSION_DEPTH);
+}

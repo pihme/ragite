@@ -5,6 +5,7 @@ test:
 	cargo fetch --locked
 	env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
 	cargo build -p ragite-sqlite
+	@echo "sqlite3 version: $$(sqlite3 -version)"
 	env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
 	cargo test --workspace
 	RAGITE_EXTENSION="$(CURDIR)/target/debug/libragite.so" python3 tests/languages/python/load_test.py

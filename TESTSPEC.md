@@ -1,6 +1,6 @@
 # Test specification
 
-Status: pre-1.0. The cases in this file are implemented and run in CI. Cases carry stable IDs (`TC-n`). Tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
+Status: version 1. The cases in this file are implemented and run in CI. Cases carry stable IDs (`TC-n`). Tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
 Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-283.
 

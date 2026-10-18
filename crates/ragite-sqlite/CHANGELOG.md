@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/pihme/ragite/compare/ragite/v0.3.0...ragite/v0.3.1) - 2026-10-18
+
+### Other
+
+- address QA notes on the user guide and its block test ([#48](https://github.com/pihme/ragite/pull/48))
+- add a user guide whose SQL examples run in CI ([#44](https://github.com/pihme/ragite/pull/44))
+- gate the release PR on release-inputs and record Model changes in ragite-core ([#45](https://github.com/pihme/ragite/pull/45))
+- list root release inputs and perf commits in the changelog ([#42](https://github.com/pihme/ragite/pull/42))
+- working quickstart, setup prerequisites, and tests that keep them honest ([#41](https://github.com/pihme/ragite/pull/41))
+
 ## [0.3.0](https://github.com/pihme/ragite/compare/ragite/v0.2.0...ragite/v0.3.0) - 2026-10-16
 
 ### Added

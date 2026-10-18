@@ -38,30 +38,61 @@ jobs:
           python-version: "3.12"
       - name: Install harness
         run: pip install -r bench/requirements.txt
+      # Workflow inputs are passed as environment variables. Pasting an input
+      # into a run script would let a model name or a dataset string execute as shell.
       - name: Build extension with the candidate
         id: build
+        env:
+          MODEL: ${{ inputs.model }}
         run: |
-          read -r hf kind qp pp < <(python3 - "${{ inputs.model }}" <<'PY'
-          import sys, tomllib
-          m = next(m for m in tomllib.load(open("bench/candidates.toml","rb"))["model"] if m["name"] == sys.argv[1])
-          print(m["hf"], m["kind"], repr(m.get("query_prefix","")), repr(m.get("passage_prefix","")))
+          python3 - "$MODEL" <<'PY'
+          import os, subprocess, sys, tomllib
+          name = sys.argv[1]
+          with open("bench/candidates.toml", "rb") as fh:
+              models = tomllib.load(fh)["model"]
+          m = next(item for item in models if item["name"] == name)
+          qp = m.get("query_prefix", "")
+          pp = m.get("passage_prefix", "")
+          ext = subprocess.check_output(
+              ["bench/build_model.sh", m["hf"], name, qp, pp], text=True
+          ).strip()
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              for key, value in (
+                  ("hf", m["hf"]),
+                  ("kind", m["kind"]),
+                  ("pp", pp),
+                  ("ext", ext),
+              ):
+                  fh.write(f"{key}<<RAGITE_VALUE_END\n{value}\nRAGITE_VALUE_END\n")
           PY
-          )
-          echo "hf=$hf" >> "$GITHUB_OUTPUT"; echo "kind=$kind" >> "$GITHUB_OUTPUT"; echo "pp=$(eval echo $pp)" >> "$GITHUB_OUTPUT"
-          ext=$(bench/build_model.sh "$hf" "${{ inputs.model }}" "$(eval echo $qp)" "$(eval echo $pp)")
-          echo "ext=$ext" >> "$GITHUB_OUTPUT"
       - name: Parity check against the reference
-        run: python3 bench/parity/check_parity.py --extension "${{ steps.build.outputs.ext }}" --hf "${{ steps.build.outputs.hf }}" --kind "${{ steps.build.outputs.kind }}" --passage-prefix "${{ steps.build.outputs.pp }}"
+        env:
+          EXT: ${{ steps.build.outputs.ext }}
+          HF: ${{ steps.build.outputs.hf }}
+          KIND: ${{ steps.build.outputs.kind }}
+          PP: ${{ steps.build.outputs.pp }}
+        run: python3 bench/parity/check_parity.py --extension "$EXT" --hf "$HF" --kind "$KIND" --passage-prefix "$PP"
       - name: Quality
+        env:
+          EXT: ${{ steps.build.outputs.ext }}
+          MODEL: ${{ inputs.model }}
+          DATASETS: ${{ inputs.datasets }}
+          MAX_DOCS: ${{ inputs.max_docs }}
         run: |
-          for ds in ${{ inputs.datasets }}; do
-            python3 bench/run_quality.py --extension "${{ steps.build.outputs.ext }}" --dataset "$ds" \
-              ${{ inputs.max_docs && format('--max-docs {0}', inputs.max_docs) || '' }} \
-              --out "bench/results/quality/${{ inputs.model }}--${ds//\//_}.json"
+          set -euo pipefail
+          read -r -a datasets <<< "$DATASETS"
+          args=()
+          if [ -n "$MAX_DOCS" ]; then
+            args+=(--max-docs "$MAX_DOCS")
+          fi
+          for ds in "${datasets[@]}"; do
+            python3 bench/run_quality.py --extension "$EXT" --dataset "$ds" \
+              "${args[@]}" \
+              --out "bench/results/quality/${MODEL//\//_}--${ds//\//_}.json"
           done
           if [ -s bench/questions/own.jsonl ]; then
-            python3 bench/run_quality.py --extension "${{ steps.build.outputs.ext }}" --own bench/questions/own.jsonl \
-              --out "bench/results/quality/${{ inputs.model }}--own.json"
+            python3 bench/run_quality.py --extension "$EXT" --own bench/questions/own.jsonl \
+              --out "bench/results/quality/${MODEL//\//_}--own.json"
           fi
       - uses: actions/upload-artifact@v5
         if: always()  # keep the datasets that finished when a later one fails

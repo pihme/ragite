@@ -1,6 +1,6 @@
 # RAGite specification
 
-Status: pre-1.0. The interface in this file is implemented in the current release. Requirements carry stable IDs (`REQ-n`); new ones get the next free number, removed ones are not reused. Section 10 records each change, newest first.
+Status: version 1. The interface in this file is implemented in the current release. Requirements carry stable IDs (`REQ-n`); new ones get the next free number, removed ones are not reused. Section 10 records each change, newest first.
 
 ## 1. Goal
 

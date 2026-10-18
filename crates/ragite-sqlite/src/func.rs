@@ -53,7 +53,7 @@ fn scalar(
     if rc == SQLITE_OK {
         Ok(())
     } else {
-        Err(format!("ragite could not register {name}"))
+        Err(format!("RAGite could not register {name}"))
     }
 }
 
@@ -64,7 +64,7 @@ fn register_catalog(db: *mut sqlite3) -> Result<(), String> {
         let rc =
             unsafe { sqlite3_create_module_v2(db, c_name.as_ptr(), module, ptr::null_mut(), None) };
         if rc != SQLITE_OK {
-            return Err(format!("ragite could not register {name}"));
+            return Err(format!("RAGite could not register {name}"));
         }
     }
     Ok(())
@@ -117,7 +117,7 @@ unsafe extern "C" fn catalog_connect(
             SQLITE_ERROR
         }
         Err(_) => {
-            set_pz(pz_err, "ragite failed while opening the model catalog");
+            set_pz(pz_err, "RAGite failed while opening the model catalog");
             SQLITE_ERROR
         }
     }
@@ -458,7 +458,7 @@ fn table_sql(
 fn db_handle(ctx: *mut sqlite3_context) -> Result<*mut sqlite3, String> {
     let db = unsafe { sqlite3_context_db_handle(ctx) };
     if db.is_null() {
-        Err("ragite could not read the database".to_string())
+        Err("RAGite could not read the database".to_string())
     } else {
         Ok(db)
     }
@@ -473,7 +473,7 @@ fn arg_text(argv: *mut *mut sqlite3_value, index: c_int) -> Option<String> {
 
 fn guard_ctx(ctx: *mut sqlite3_context, f: impl FnOnce()) {
     if catch_unwind(AssertUnwindSafe(f)).is_err() {
-        result_error(ctx, "ragite failed");
+        result_error(ctx, "RAGite failed");
     }
 }
 

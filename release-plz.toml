@@ -24,7 +24,7 @@ git_tag_name = "ragite-core/v{{ version }}"
 name = "ragite-sqlite"
 version_group = "ragite"
 git_tag_name = "ragite/v{{ version }}"
-git_release_name = "ragite {{ version }}"
+git_release_name = "RAGite {{ version }}"
 changelog_include = ["ragite-core"]
 
 # Same groups as the release-plz default, plus a Performance group so perf:

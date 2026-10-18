@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in ragite does not work as documented.
+description: Something in RAGite does not work as documented.
 labels: ["bug"]
 body:
   - type: markdown
@@ -12,7 +12,7 @@ body:
     attributes:
       label: Version
       description: The release version or the commit you built.
-      placeholder: 0.1.0
+      placeholder: 1.0.0
     validations:
       required: true
   - type: textarea

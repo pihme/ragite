@@ -910,7 +910,7 @@ unsafe fn update(
     }
     if old_rowid.is_none() {
         if new_rowid.is_some() || doc_id_col.is_some() {
-            return Err("doc_id is assigned by ragite".to_string());
+            return Err("doc_id is assigned by RAGite".to_string());
         }
         let text = require_text(text)?;
         let source = source.unwrap_or_default();
@@ -925,7 +925,7 @@ unsafe fn update(
     }
     let old_rowid = old_rowid.unwrap();
     if new_rowid.is_some_and(|id| id != old_rowid) || doc_id_col.is_some_and(|id| id != old_rowid) {
-        return Err("doc_id is assigned by ragite".to_string());
+        return Err("doc_id is assigned by RAGite".to_string());
     }
     let text = require_text(text)?;
     let source = source.unwrap_or_default();

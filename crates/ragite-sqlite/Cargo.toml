@@ -4,7 +4,7 @@ version = "0.3.3"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Loadable SQLite extension for ragite"
+description = "Loadable SQLite extension for RAGite"
 publish = false
 
 [lib]

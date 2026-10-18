@@ -1,6 +1,6 @@
 # Roadmap
 
-RAGite is pre-1.0. This file lists what each major version is meant to deliver. Details and requirement IDs live in [SPEC.md](SPEC.md).
+RAGite 1.0 is the current major version. This file lists what each major version is meant to deliver. Details and requirement IDs live in [SPEC.md](SPEC.md).
 
 Statements about future versions reflect the current line of thinking. They are not a commitment.
 

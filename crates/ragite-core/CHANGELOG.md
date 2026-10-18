@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3](https://github.com/pihme/ragite/compare/ragite-core/v0.3.2...ragite-core/v0.3.3) - 2026-10-18
+
+### Other
+
+- release v0.3.2 ([#62](https://github.com/pihme/ragite/pull/62))
+
 ## [0.3.2](https://github.com/pihme/ragite/compare/ragite-core/v0.3.1...ragite-core/v0.3.2) - 2026-10-18
 
 ### Other

@@ -28,9 +28,9 @@ A RAGite build has no runtime switch for chunk size, overlap, fusion constant, w
 | Fusion: `reciprocal_rank_fusion`, `order_fused_chunks`, `best_document_scores`, private `RRF_K` (60) | `crates/ragite-core/src/fusion.rs` |
 | Model, prefixes, `Role`, `BuiltinModel::embed_blob` | `crates/ragite-core/src/model.rs` |
 | Chunk invariants used by the fuzz targets and TC-250 | `crates/ragite-core/src/invariants.rs` |
-| Format check `canonical_format`, chunker dispatch `write_chunks`, row writes `insert_chunk` | `crates/ragite-sqlite/src/vtab.rs` |
-| Search: `best_index`, `search_rows`, `vector_ids`, `fts_ids`, `fts_phrase` | `crates/ragite-sqlite/src/vtab.rs` |
-| Shadow tables, FTS5 tokenizer, vector distance metric | `create_shadows` in `crates/ragite-sqlite/src/vtab.rs` |
+| Format check `canonical_format`, chunker dispatch `write_chunks`, row writes `insert_chunk` | `crates/ragite-sqlite/src/vtab/mod.rs` |
+| Search: `plan`, `rows`, `vector_ids`, `fts_ids`, `fts_phrase` | `crates/ragite-sqlite/src/vtab/search.rs` (`best_index` and `filter` in `vtab/mod.rs` only adapt the SQLite callbacks) |
+| Shadow tables, FTS5 tokenizer, vector distance metric | `create_shadows` in `crates/ragite-sqlite/src/vtab/mod.rs` |
 
 `ragite-core` must not link SQLite (REQ-1). Chunking and fusion logic goes there, and `ragite-sqlite` only calls it.
 
@@ -44,7 +44,7 @@ Then the code, in this order:
 
 1. **Chunker in `ragite-core`.** Add a module, for example `crates/ragite-core/src/asciidoc.rs`, with `pub(crate) fn cut(text: &str) -> Vec<Chunk>`. If some inputs are invalid for the type, return `Result<Vec<Chunk>, String>` the way `chunk_docling` does. The `Err` string becomes the SQLite error message, so it must name the failed check and must not contain document text (REQ-54). See [section 2](#2-write-a-new-chunker) for the rules a chunker has to follow.
 2. **Export it.** In `crates/ragite-core/src/lib.rs`, add `mod asciidoc;` and a public entry point, either a wrapper in `chunk.rs` next to `chunk_html` or a `pub fn chunk_asciidoc` in the module itself, and add it to the `pub use` line.
-3. **Accept the media type.** In `canonical_format` (`crates/ragite-sqlite/src/vtab.rs`), add an arm that maps the lowercased value to its canonical spelling. Anything without an arm fails with `format is not accepted: …`, and that includes media-type parameters (REQ-72).
+3. **Accept the media type.** In `canonical_format` (`crates/ragite-sqlite/src/vtab/mod.rs`), add an arm that maps the lowercased value to its canonical spelling. Anything without an arm fails with `format is not accepted: …`, and that includes media-type parameters (REQ-72).
 4. **Dispatch to the chunker.** In `write_chunks` (same file), add a `match` arm for the canonical string. The last arm is `_ => chunk_plain(text)`, so by design a type without its own arm is cut as plain text. If your type needs its own cut, add the arm and check the cut with an integration test (step 6).
 5. **Leave the rest alone.** `insert_chunk` writes the chunk row, the vector, and the FTS row for any `Chunk`. `update_document` re-chunks when `text` or `format` changes. Neither needs a change. `meta_json` is reserved for Docling (REQ-16, REQ-19). A new type that wants its own metadata needs a spec change for that as well.
 6. **Tests.**
@@ -140,7 +140,7 @@ Things to know before you change anything:
 
 ### How a `MATCH` runs today
 
-`best_index` turns a usable `MATCH` constraint into the search plan (`IDX_MATCH`). `filter` then calls `search_rows`, which does the following:
+`best_index` turns a usable `MATCH` constraint into the search plan (`IDX_MATCH`) and asks `search::plan` which equalities to consume. `filter` passes the query, that plan, and the surface to `search::rows`, which does the following:
 
 1. Returns no rows for an empty query, without running the Model (REQ-43).
 2. Embeds the query with `Role::Query`, so the query prefix is added (REQ-45).
@@ -157,7 +157,7 @@ None of these can be set from SQL or at `CREATE VIRTUAL TABLE`. Each one is a co
 | --- | --- | --- | --- |
 | RRF constant k | 60 | `const RRF_K` in `fusion.rs` (private) | REQ-15, REQ-66, REQ-80 |
 | Weights of the two lists | equal, implicitly | `add_ranks` is called with the same formula for both lists, and there is no weight parameter | REQ-15, REQ-66 |
-| Candidate depth per list | 50 | `FUSION_DEPTH` in `lib.rs`, used by `search_rows` for both lists and by `best_index` as `estimatedRows` | REQ-15, REQ-38, section 8.1 |
+| Candidate depth per list | 50 | `FUSION_DEPTH` in `lib.rs`, used by `search::rows` for both lists and as `estimatedRows` on the MATCH plan | REQ-15, REQ-38, section 8.1 |
 | Document score | best Chunk (max) | `best_document_scores` | section 4.5 intro, REQ-80 |
 | Tie order | `doc_id`, then Chunk id | `order_fused_chunks`, `best_document_scores` | REQ-41 |
 | Vector metric | cosine | `distance_metric=cosine` in `create_shadows` | REQ-66 |
@@ -171,7 +171,7 @@ None of these can be set from SQL or at `CREATE VIRTUAL TABLE`. Each one is a co
 Points that tend to surprise people:
 
 - **There is no score cutoff, and the vector side always returns neighbours.** KNN returns the `FUSION_DEPTH` nearest Chunks whatever they contain, so a `MATCH` on a table with at least 50 Chunks returns 50 rows even for a query that matches no word. `tc_27_same_scores_and_fixed_depth` in `tests/search.rs` checks exactly that.
-- **`=` and `IN` select Chunks before the depth cut (REQ-99).** `best_index` consumes those constraints with `MATCH` and records the columns in `idxStr`. `chunk_id_restriction` turns them into Chunk ids. `vector_ids` passes that set into the KNN as `rowid IN`, and `fts_ids` applies it before `LIMIT`. A `rowid` equality keeps the search plan. A join key on a RAGite column is one of those constraints, and the constrained plan costs less than `MATCH` alone so an inner join uses it (REQ-102). `score` (REQ-100), `LIMIT`, `OFFSET`, and `ORDER BY` (REQ-101), a predicate that names only another table (REQ-102), and `LIKE` and the inequalities (REQ-103) stay on the fused rows. The caller-facing account is in the user guide, section 3, "Narrowing a search". `tests/search.rs` checks this as TC-272 through TC-282.
+- **`=` and `IN` select Chunks before the depth cut (REQ-99).** `search::plan` consumes those constraints with `MATCH` and records the columns in `idxStr`. `chunk_id_restriction` turns them into Chunk ids. `vector_ids` passes that set into the KNN as `rowid IN`, and `fts_ids` applies it before `LIMIT`. A `rowid` equality keeps the search plan. A join key on a RAGite column is one of those constraints, and the constrained plan costs less than `MATCH` alone so an inner join uses it (REQ-102). `score` (REQ-100), `LIMIT`, `OFFSET`, and `ORDER BY` (REQ-101), a predicate that names only another table (REQ-102), and `LIKE` and the inequalities (REQ-103) stay on the fused rows. The caller-facing account is in the user guide, section 3, "Narrowing a search". `tests/search.rs` checks this as TC-272 through TC-282.
 - **Changing `create_shadows` affects only new tables.** The tokenizer and the distance metric are fixed into each table when it is created. Existing databases keep what they were created with.
 - **Changing `RRF_K` changes every expected Score in the tests.** `fusion.rs` unit tests and `tests/search.rs` assert literal values such as `2.0 / 61.0`.
 

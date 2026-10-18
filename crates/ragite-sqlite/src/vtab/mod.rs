@@ -1,26 +1,26 @@
 //! Virtual tables `ragite` (documents) and the read-only companion `<name>_chunks`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::mem;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
 use libsqlite3_sys::{
-    SQLITE_DONE, SQLITE_ERROR, SQLITE_FLOAT, SQLITE_INDEX_CONSTRAINT_EQ,
-    SQLITE_INDEX_CONSTRAINT_MATCH, SQLITE_INDEX_SCAN_UNIQUE, SQLITE_INTEGER, SQLITE_NULL,
-    SQLITE_OK, SQLITE_TEXT, SQLITE_TRANSIENT, sqlite3, sqlite3_declare_vtab, sqlite3_free,
-    sqlite3_index_info, sqlite3_module, sqlite3_value, sqlite3_value_bytes, sqlite3_value_dup,
-    sqlite3_value_free, sqlite3_value_int64, sqlite3_value_text, sqlite3_value_type, sqlite3_vtab,
-    sqlite3_vtab_cursor,
+    SQLITE_ERROR, SQLITE_FLOAT, SQLITE_INDEX_CONSTRAINT_EQ, SQLITE_INDEX_CONSTRAINT_MATCH,
+    SQLITE_INDEX_SCAN_UNIQUE, SQLITE_INTEGER, SQLITE_NULL, SQLITE_OK, SQLITE_TEXT,
+    SQLITE_TRANSIENT, sqlite3, sqlite3_declare_vtab, sqlite3_free, sqlite3_index_info,
+    sqlite3_module, sqlite3_value, sqlite3_value_bytes, sqlite3_value_int64, sqlite3_value_text,
+    sqlite3_value_type, sqlite3_vtab, sqlite3_vtab_cursor,
 };
 use ragite_core::{
-    BuiltinModel, Chunk, FUSION_DEPTH, FusedChunk, Role, TECHNICAL_ID, best_document_scores,
-    builtin_model, chunk_docling, chunk_html, chunk_markdown, chunk_plain, heading_path_json,
-    order_fused_chunks, reciprocal_rank_fusion, sha256_hex,
+    BuiltinModel, Chunk, Role, TECHNICAL_ID, builtin_model, chunk_docling, chunk_html,
+    chunk_markdown, chunk_plain, heading_path_json, sha256_hex,
 };
 
 use crate::sql::{self, Stmt};
+
+mod search;
 
 const DOC_COLUMNS: &str =
     "doc_id INTEGER, text TEXT, source TEXT, format TEXT, hash TEXT, score REAL";
@@ -28,8 +28,6 @@ const CHUNK_COLUMNS: &str = "chunk TEXT, doc_id INTEGER, source TEXT, start INTE
 
 unsafe extern "C" {
     fn ragite_vtab_in(info: *mut sqlite3_index_info, i_cons: c_int, handle: c_int) -> c_int;
-    fn ragite_vtab_in_first(value: *mut sqlite3_value, out: *mut *mut sqlite3_value) -> c_int;
-    fn ragite_vtab_in_next(value: *mut sqlite3_value, out: *mut *mut sqlite3_value) -> c_int;
 }
 
 const IDX_SCAN: c_int = 0;
@@ -559,28 +557,6 @@ unsafe extern "C" fn vtab_best_index(
     )
 }
 
-/// Columns whose `=` or `IN` can select Chunks before the depth is counted.
-/// `score` is omitted on both tables. The companion does not expose `format` or `hash`.
-fn match_eq_column(chunks: bool, column: c_int) -> bool {
-    if chunks {
-        column == -1
-            || column == COL_CHUNK
-            || column == COL_C_DOC
-            || column == COL_C_SOURCE
-            || column == COL_START
-            || column == COL_END
-            || column == COL_PATH
-            || column == COL_META
-    } else {
-        column == -1
-            || column == COL_DOC_ID
-            || column == COL_TEXT
-            || column == COL_SOURCE
-            || column == COL_FORMAT
-            || column == COL_HASH
-    }
-}
-
 unsafe fn best_index(vtab: *mut sqlite3_vtab, info_ptr: *mut sqlite3_index_info) -> c_int {
     if info_ptr.is_null() {
         return SQLITE_ERROR;
@@ -616,39 +592,41 @@ unsafe fn best_index(vtab: *mut sqlite3_vtab, info_ptr: *mut sqlite3_index_info)
         usage[index].argvIndex = 1;
         usage[index].omit = 1;
         info.idxNum = IDX_MATCH;
-        // The unconstrained plan must cost more than one that also consumes a
-        // column constraint. When the costs are equal, SQLite keeps only the
-        // plan with fewer tables, and that plan is the unconstrained MATCH.
-        // An inner join then misses rows that the same join returns as a
-        // CROSS JOIN (REQ-102).
-        info.estimatedCost = 1_000_000.0;
-        info.estimatedRows = FUSION_DEPTH as i64;
-        let mut argv_index = 2;
-        let mut columns = Vec::new();
+        let surface = if chunks {
+            search::Surface::Companion
+        } else {
+            search::Surface::Document
+        };
+        let mut offered = Vec::new();
+        let mut offered_at = Vec::new();
         for (index, constraint) in constraints.iter().enumerate() {
-            if constraint.usable == 0
-                || constraint.op != SQLITE_INDEX_CONSTRAINT_EQ as u8
-                || !match_eq_column(chunks, constraint.iColumn)
-            {
+            if constraint.usable == 0 || constraint.op != SQLITE_INDEX_CONSTRAINT_EQ as u8 {
+                continue;
+            }
+            if !search::narrows(surface, constraint.iColumn) {
                 continue;
             }
             let in_list = unsafe { ragite_vtab_in(info_ptr, index as c_int, -1) } != 0;
-            if in_list {
-                unsafe { ragite_vtab_in(info_ptr, index as c_int, 1) };
-            }
-            usage[index].argvIndex = argv_index;
-            usage[index].omit = 1;
-            argv_index += 1;
-            let token = if in_list {
-                format!("i{}", constraint.iColumn)
-            } else {
-                constraint.iColumn.to_string()
-            };
-            columns.push(token);
+            offered_at.push(index);
+            offered.push(search::UsableEq {
+                column: constraint.iColumn,
+                in_list,
+            });
         }
-        if !columns.is_empty() {
-            info.estimatedCost = 10.0;
-            let encoded = columns.join(",");
+        let plan = search::plan(surface, &offered);
+        let mut argv_index = 2;
+        for consumed in plan.consumed {
+            let at = offered_at[consumed];
+            if offered[consumed].in_list {
+                unsafe { ragite_vtab_in(info_ptr, at as c_int, 1) };
+            }
+            usage[at].argvIndex = argv_index;
+            usage[at].omit = 1;
+            argv_index += 1;
+        }
+        info.estimatedCost = plan.estimated_cost;
+        info.estimatedRows = plan.estimated_rows;
+        if let Some(encoded) = plan.idx_str {
             let ptr = sql::alloc_text(&encoded);
             if ptr.is_null() {
                 return SQLITE_ERROR;
@@ -791,11 +769,21 @@ unsafe fn filter(
         } else {
             String::new()
         };
-        match pushed_eqs(idx_str, argc, argv) {
-            Ok(Some(eqs)) => search_rows(vtab, &query, &eqs),
-            Ok(None) => Ok(Vec::new()),
-            Err(err) => Err(err),
-        }
+        let surface = if vtab.chunks {
+            search::Surface::Companion
+        } else {
+            search::Surface::Document
+        };
+        search::rows(
+            vtab.db,
+            &vtab.schema,
+            &vtab.doc_name,
+            surface,
+            &query,
+            idx_str,
+            argc,
+            argv,
+        )
     } else if idx_num == IDX_ROWID {
         match unsafe { rowid_argument(argc, argv) } {
             Some(rowid) => load_row(vtab, rowid),
@@ -920,364 +908,6 @@ fn load_row(vtab: &Vtab, rowid: i64) -> Result<Vec<Row>, String> {
             score: None,
         }])
     }
-}
-
-struct HeldValue {
-    value: *mut sqlite3_value,
-    owned: bool,
-}
-
-impl Drop for HeldValue {
-    fn drop(&mut self) {
-        if self.owned && !self.value.is_null() {
-            unsafe { sqlite3_value_free(self.value) };
-        }
-    }
-}
-
-struct PushedTerm {
-    column: c_int,
-    values: Vec<HeldValue>,
-}
-
-/// `idxStr` lists consumed constraints, in argv order after the MATCH argument.
-/// A token `iN` is an `IN` list on column N. Any other token is `=` on that column.
-/// `Ok(None)` means the constraints match no stored value.
-fn pushed_eqs(
-    idx_str: *const c_char,
-    argc: c_int,
-    argv: *mut *mut sqlite3_value,
-) -> Result<Option<Vec<PushedTerm>>, String> {
-    if idx_str.is_null() {
-        return Ok(Some(Vec::new()));
-    }
-    let text = unsafe { CStr::from_ptr(idx_str) }.to_string_lossy();
-    if text.is_empty() {
-        return Ok(Some(Vec::new()));
-    }
-    let mut eqs = Vec::new();
-    for (offset, part) in text.split(',').enumerate() {
-        let in_list = part.starts_with('i');
-        let number = if in_list { &part[1..] } else { part };
-        let column = number
-            .parse::<c_int>()
-            .map_err(|_| format!("search plan is invalid: {text}"))?;
-        let argv_index = 1 + offset as isize;
-        if argv.is_null() || argv_index >= argc as isize {
-            return Err(format!("search plan is invalid: {text}"));
-        }
-        let value = unsafe { *argv.offset(argv_index) };
-        if value.is_null() {
-            return Err(format!("search plan is invalid: {text}"));
-        }
-        let values = if in_list {
-            in_values(value)?
-        } else if unsafe { sqlite3_value_type(value) } == SQLITE_NULL {
-            return Ok(None);
-        } else {
-            vec![HeldValue {
-                value,
-                owned: false,
-            }]
-        };
-        if values.is_empty() {
-            return Ok(None);
-        }
-        eqs.push(PushedTerm { column, values });
-    }
-    Ok(Some(eqs))
-}
-
-fn in_values(handle: *mut sqlite3_value) -> Result<Vec<HeldValue>, String> {
-    let mut values = Vec::new();
-    let mut item = std::ptr::null_mut();
-    let mut rc = unsafe { ragite_vtab_in_first(handle, &mut item) };
-    while rc == SQLITE_OK && !item.is_null() {
-        if unsafe { sqlite3_value_type(item) } != SQLITE_NULL {
-            let dup = unsafe { sqlite3_value_dup(item) };
-            if dup.is_null() {
-                return Err("out of memory".to_string());
-            }
-            values.push(HeldValue {
-                value: dup,
-                owned: true,
-            });
-        }
-        rc = unsafe { ragite_vtab_in_next(handle, &mut item) };
-    }
-    if rc != SQLITE_DONE && rc != SQLITE_OK {
-        return Err("search constraint list failed".to_string());
-    }
-    Ok(values)
-}
-
-fn search_rows(vtab: &Vtab, query: &str, eqs: &[PushedTerm]) -> Result<Vec<Row>, String> {
-    if query.is_empty() {
-        return Ok(Vec::new());
-    }
-    let model = require_model(vtab)?;
-    let blob = model.embed_blob(query, Role::Query);
-    let depth = FUSION_DEPTH as i64;
-    let vector = vector_ids(vtab, &blob, depth, eqs)?;
-    let full_text = fts_ids(vtab, query, depth, eqs)?;
-    let fused = reciprocal_rank_fusion(&vector, &full_text);
-    let doc_of = chunk_documents(vtab, &fused)?;
-    let mut chunks = Vec::new();
-    for (chunk_id, score) in fused {
-        let Some(doc_id) = doc_of.get(&chunk_id).copied() else {
-            continue;
-        };
-        chunks.push(FusedChunk {
-            chunk_id,
-            doc_id,
-            score,
-        });
-    }
-    if vtab.chunks {
-        order_fused_chunks(&mut chunks);
-        load_scored_chunks(vtab, &chunks)
-    } else {
-        load_scored_docs(vtab, &best_document_scores(&chunks))
-    }
-}
-
-fn vector_ids(
-    vtab: &Vtab,
-    blob: &[u8],
-    depth: i64,
-    eqs: &[PushedTerm],
-) -> Result<Vec<i64>, String> {
-    let vec_name = sql::qualified(&vtab.schema, &format!("{}_vec", vtab.doc_name));
-    let restrict = chunk_id_restriction(vtab, eqs)?;
-    let stmt = Stmt::prepare(
-        vtab.db,
-        &format!(
-            "SELECT rowid FROM {vec_name} WHERE embedding MATCH ?1 AND k = ?2{restrict} ORDER BY distance"
-        ),
-    )?;
-    stmt.bind_blob(1, blob)?;
-    stmt.bind_i64(2, depth)?;
-    bind_eqs(&stmt, eqs)?;
-    read_ids(&stmt)
-}
-
-fn fts_ids(vtab: &Vtab, query: &str, depth: i64, eqs: &[PushedTerm]) -> Result<Vec<i64>, String> {
-    let bare = format!("{}_fts", vtab.doc_name);
-    let from = sql::qualified(&vtab.schema, &bare);
-    let name = sql::quote_ident(&bare);
-    let restrict = chunk_id_restriction(vtab, eqs)?;
-    let stmt = Stmt::prepare(
-        vtab.db,
-        &format!(
-            "SELECT rowid FROM {from} WHERE {name} MATCH ?1{restrict} ORDER BY bm25({name}) LIMIT ?2"
-        ),
-    )?;
-    stmt.bind_text(1, &fts_phrase(query))?;
-    stmt.bind_i64(2, depth)?;
-    bind_eqs(&stmt, eqs)?;
-    read_ids(&stmt)
-}
-
-fn bind_eqs(stmt: &Stmt, eqs: &[PushedTerm]) -> Result<(), String> {
-    let mut param = 3;
-    for eq in eqs {
-        for value in &eq.values {
-            stmt.bind_value(param, value.value)?;
-            param += 1;
-        }
-    }
-    Ok(())
-}
-
-fn column_expr(chunks: bool, column: c_int) -> Result<&'static str, String> {
-    Ok(match (chunks, column) {
-        (true, COL_C_SOURCE) | (false, COL_SOURCE) => "d.source",
-        (true, COL_CHUNK) => "c.text",
-        (true, -1) => "c.chunk_id",
-        (true, COL_C_DOC) => "c.doc_id",
-        (true, COL_START) => "c.start",
-        (true, COL_END) => "c.\"end\"",
-        (true, COL_PATH) => "c.heading_path",
-        (true, COL_META) => "c.meta_json",
-        (false, -1) | (false, COL_DOC_ID) => "d.doc_id",
-        (false, COL_TEXT) => "d.text",
-        (false, COL_FORMAT) => "d.format",
-        (false, COL_HASH) => "d.hash",
-        _ => return Err("search plan is invalid".to_string()),
-    })
-}
-
-/// Chunk ids that satisfy the pushed equalities. Empty when the search is not narrowed.
-fn chunk_id_restriction(vtab: &Vtab, eqs: &[PushedTerm]) -> Result<String, String> {
-    if eqs.is_empty() {
-        return Ok(String::new());
-    }
-    let mut param = 3usize;
-    let mut terms = Vec::with_capacity(eqs.len());
-    for eq in eqs {
-        let expr = column_expr(vtab.chunks, eq.column)?;
-        let params: Vec<usize> = (0..eq.values.len())
-            .map(|_| {
-                let current = param;
-                param += 1;
-                current
-            })
-            .collect();
-        if params.len() == 1 {
-            terms.push(format!("{expr} = ?{}", params[0]));
-        } else {
-            let list = params
-                .iter()
-                .map(|p| format!("?{p}"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            terms.push(format!("{expr} IN ({list})"));
-        }
-    }
-    let chunks = sql::qualified(&vtab.schema, &format!("{}_chunk_rows", vtab.doc_name));
-    let docs = sql::qualified(&vtab.schema, &format!("{}_documents", vtab.doc_name));
-    Ok(format!(
-        " AND rowid IN (SELECT c.chunk_id FROM {chunks} c JOIN {docs} d ON d.doc_id = c.doc_id WHERE {})",
-        terms.join(" AND ")
-    ))
-}
-
-/// One FTS5 phrase. Quotes inside the text are doubled so they stay inside it.
-fn fts_phrase(query: &str) -> String {
-    let mut phrase = String::with_capacity(query.len() + 2);
-    phrase.push('"');
-    for ch in query.chars() {
-        if ch == '"' {
-            phrase.push('"');
-        }
-        phrase.push(ch);
-    }
-    phrase.push('"');
-    phrase
-}
-
-fn read_ids(stmt: &Stmt) -> Result<Vec<i64>, String> {
-    let mut ids = Vec::new();
-    while stmt.step()? {
-        ids.push(stmt.column_i64(0));
-    }
-    Ok(ids)
-}
-
-fn chunk_documents(vtab: &Vtab, fused: &[(i64, f64)]) -> Result<HashMap<i64, i64>, String> {
-    if fused.is_empty() {
-        return Ok(HashMap::new());
-    }
-    let list = fused
-        .iter()
-        .map(|(id, _)| id.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
-    let rows = sql::qualified(&vtab.schema, &format!("{}_chunk_rows", vtab.doc_name));
-    let stmt = Stmt::prepare(
-        vtab.db,
-        &format!("SELECT chunk_id, doc_id FROM {rows} WHERE chunk_id IN ({list})"),
-    )?;
-    let mut map = HashMap::new();
-    while stmt.step()? {
-        map.insert(stmt.column_i64(0), stmt.column_i64(1));
-    }
-    Ok(map)
-}
-
-fn load_scored_chunks(vtab: &Vtab, chunks: &[FusedChunk]) -> Result<Vec<Row>, String> {
-    if chunks.is_empty() {
-        return Ok(Vec::new());
-    }
-    let list = chunks
-        .iter()
-        .map(|chunk| chunk.chunk_id.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
-    let rows = sql::qualified(&vtab.schema, &format!("{}_chunk_rows", vtab.doc_name));
-    let docs = sql::qualified(&vtab.schema, &format!("{}_documents", vtab.doc_name));
-    let stmt = Stmt::prepare(
-        vtab.db,
-        &format!(
-            "SELECT c.chunk_id, c.doc_id, d.source, c.start, c.end, c.heading_path, c.text, c.meta_json
-             FROM {rows} c
-             JOIN {docs} d ON d.doc_id = c.doc_id
-             WHERE c.chunk_id IN ({list})"
-        ),
-    )?;
-    let mut by_id = HashMap::new();
-    while stmt.step()? {
-        let chunk_id = stmt.column_i64(0);
-        by_id.insert(
-            chunk_id,
-            Row::Chunk {
-                chunk_id,
-                doc_id: stmt.column_i64(1),
-                source: stmt.column_text(2).unwrap_or_default(),
-                start: stmt.column_i64(3),
-                end: stmt.column_i64(4),
-                heading_path: stmt.column_text(5).unwrap_or_else(|| "[]".to_string()),
-                text: stmt.column_text(6).unwrap_or_default(),
-                meta_json: stmt.column_text(7),
-                score: None,
-            },
-        );
-    }
-    let mut out = Vec::with_capacity(chunks.len());
-    for chunk in chunks {
-        let Some(mut row) = by_id.remove(&chunk.chunk_id) else {
-            continue;
-        };
-        if let Row::Chunk { score, .. } = &mut row {
-            *score = Some(chunk.score);
-        }
-        out.push(row);
-    }
-    Ok(out)
-}
-
-fn load_scored_docs(vtab: &Vtab, docs: &[(i64, f64)]) -> Result<Vec<Row>, String> {
-    if docs.is_empty() {
-        return Ok(Vec::new());
-    }
-    let list = docs
-        .iter()
-        .map(|(id, _)| id.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
-    let documents = sql::qualified(&vtab.schema, &format!("{}_documents", vtab.doc_name));
-    let stmt = Stmt::prepare(
-        vtab.db,
-        &format!(
-            "SELECT doc_id, text, source, format, hash FROM {documents} WHERE doc_id IN ({list})"
-        ),
-    )?;
-    let mut by_id = HashMap::new();
-    while stmt.step()? {
-        let doc_id = stmt.column_i64(0);
-        by_id.insert(
-            doc_id,
-            Row::Doc {
-                doc_id,
-                text: stmt.column_text(1).unwrap_or_default(),
-                source: stmt.column_text(2).unwrap_or_default(),
-                format: stmt.column_text(3).unwrap_or_default(),
-                hash: stmt.column_text(4).unwrap_or_default(),
-                score: None,
-            },
-        );
-    }
-    let mut out = Vec::with_capacity(docs.len());
-    for (doc_id, score) in docs {
-        let Some(mut row) = by_id.remove(doc_id) else {
-            continue;
-        };
-        if let Row::Doc { score: slot, .. } = &mut row {
-            *slot = Some(*score);
-        }
-        out.push(row);
-    }
-    Ok(out)
 }
 
 unsafe extern "C" fn vtab_next(cursor: *mut sqlite3_vtab_cursor) -> c_int {

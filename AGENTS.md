@@ -36,7 +36,7 @@ License: **MIT OR Apache-2.0** (dual, Rust convention; `LICENSE-MIT`, `LICENSE-A
 
 ### Versions and releases
 
-- SemVer. `ragite-sqlite` is tagged `ragite/vX.Y.Z`. `ragite-core` is tagged `ragite-core/vX.Y.Z`. The GitHub Release is named `ragite X.Y.Z`.
+- SemVer. `ragite-sqlite` is tagged `ragite/vX.Y.Z`. `ragite-core` is tagged `ragite-core/vX.Y.Z`. The GitHub Release is named `RAGite X.Y.Z` (releases before 1.0 keep their name `ragite X.Y.Z`).
 - `feat:` bumps minor, including before 1.0. `fix:` and `perf:` bump patch. A breaking change before 1.0 bumps minor (0.3.x to 0.4.0, never to 1.0.0). Choose 1.0.0 by editing the version in the release pull request. After 1.0, `feat!:`, `fix!:`, or a `BREAKING CHANGE:` footer bumps major.
 - `docs:`, `test:`, `refactor:`, `chore:`, `ci:`, and `build:` never bump. A commit counts only when it touches `crates/ragite-core` or `crates/ragite-sqlite`, or when `make release-inputs` updates a `release-inputs.txt` for an input outside those directories.
 - Release-plz opens the release pull request after CI passes on `main`. Merging it tags and publishes. Do not tag, bump versions, or create releases by hand.

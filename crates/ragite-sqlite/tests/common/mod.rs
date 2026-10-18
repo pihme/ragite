@@ -1,5 +1,6 @@
 //! Shared sqlite3 CLI harness for extension tests.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::SystemTime;
@@ -7,6 +8,43 @@ use std::time::SystemTime;
 use serde_json::Value;
 
 pub const HELLO_SHA: &str = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+
+/// Cargo hides output from a passing test. This runs before the harness
+/// captures output, so the SQLite version is visible at the start of each
+/// test binary.
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "ios"
+))]
+#[used]
+#[cfg_attr(
+    any(target_os = "linux", target_os = "android"),
+    unsafe(link_section = ".init_array")
+)]
+#[cfg_attr(
+    any(target_os = "macos", target_os = "ios"),
+    unsafe(link_section = "__DATA,__mod_init_func")
+)]
+static LOG_SQLITE_VERSION: unsafe extern "C" fn() = log_sqlite_version;
+
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "ios"
+))]
+unsafe extern "C" fn log_sqlite_version() {
+    let version = Command::new("sqlite3")
+        .arg("-version")
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .unwrap_or_else(|err| format!("sqlite3 not on PATH ({err})"));
+    let mut err = std::io::stderr();
+    let _ = writeln!(err, "sqlite3 version: {version}");
+    let _ = err.flush();
+}
 
 pub fn extension_path() -> PathBuf {
     let mut path = std::env::current_exe().expect("test executable");

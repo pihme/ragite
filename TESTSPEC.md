@@ -2,7 +2,7 @@
 
 Status: draft, pre-1.0. Nothing here is implemented yet. Cases carry stable IDs (`TC-n`). Future tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-281.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-282.
 
 ## Conventions
 
@@ -590,7 +590,9 @@ Unless a case says otherwise:
 
 ## REQ-102
 
-- **TC-279** On the table from TC-272, an ordinary table `pages(path, project)` holds `('keep', 'wiki')`. `docs` joined to `pages` on `path = source`, with `pages.project = 'wiki'` and `docs MATCH` the query, does not return the `keep` Document.
+- **TC-279** On the table from TC-272, an ordinary table `pages(path, project)` holds `('keep', 'wiki')`, `('x1', 'a')`, and `('x2', 'b')`. `docs` joined to `pages` on `path = source`, with `pages.project = 'wiki'` and `docs MATCH` the query, returns the `keep` Document. Its Score equals the Score that text receives when searched alone.
+- **TC-276** On the table from TC-279, `pages CROSS JOIN docs` on `docs.source = pages.path`, and `pages LEFT JOIN docs` on that same key with the `MATCH` in the `ON` clause, each return the `keep` Document at the Score from TC-279. `EXPLAIN QUERY PLAN` for the inner join reports `INDEX 1:2`. The same plan is reported after `CREATE INDEX` on `pages(project)`.
+- **TC-282** On the table from TC-279, joining `docs` to `pages` on `pages.project = 'wiki'` with no RAGite column in the join does not return the `keep` Document. The same `MATCH` with `pages.project = 'wiki'` in the `WHERE` clause and no join key does not return it either.
 
 ## REQ-103
 

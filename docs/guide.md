@@ -171,11 +171,13 @@ WHERE docs MATCH 'How do I upgrade?' AND source = 'manual.md';
 
 On `docs` those columns are `doc_id`, `text`, `source`, `format`, `hash`, and `rowid`. On `docs_chunks` they are `chunk`, `doc_id`, `source`, `start`, `end`, `heading_path`, `meta_json`, and `rowid`. Several of them together all apply: `source = 'manual.md' AND format = 'text/markdown'` searches that subset and nothing else. The score is the rank **inside the subset**, so the same chunk can score differently when the query has no such filter.
 
+A join key on a column of this table is the same kind of constraint (REQ-102). `JOIN pages ON pages.path = docs.source` searches inside each path, once per row of `pages`, so a document outside the global top 50 comes back when `pages` names its source. An inner join, a `CROSS JOIN`, and a `LEFT JOIN` with `pages` on the left all do this.
+
 These do not select rows before the search. Each one only sees the fused candidates, so a real match outside the top 50 can be missing:
 
 - `score` is filled in by the fusion. `WHERE score > 0.02` can drop weak results. It cannot reach a chunk the top 50 never included (REQ-100).
 - `LIMIT` and `OFFSET` take a window of the fused rows, and `ORDER BY` reorders them. They do not change who was ranked or what the scores are (REQ-101).
-- A condition on **another table** in a join never reaches RAGite. `JOIN pages ON ... WHERE pages.lang = 'en'` attaches your columns to chunks the search already returned. To search only some of your rows, name a ragite column in the same query, such as `source = 'page:11'` or `doc_id = 4` (REQ-102). [Linking results](#4-linking-results-to-your-own-data) shows the join, and it has this limit.
+- A condition that mentions **only the other table** never reaches RAGite. `JOIN pages ON pages.lang = 'en'` attaches your columns to chunks the search already returned. [Linking results](#4-linking-results-to-your-own-data) shows both kinds of join.
 - `LIKE`, `!=`, `<`, `>`, and `BETWEEN` do not name the rows to keep, so they also run only on the fused rows (REQ-103). `source = 'wikipedia'` finds a document outside the global top 50. `source LIKE 'wiki%'` does not. An `OR` of equalities, such as `source = 'a' OR source = 'b'`, is included when SQLite turns it into `IN` or runs one search per value.
 
 ### What the full-text side matches
@@ -190,7 +192,7 @@ FROM docs_chunks WHERE docs_chunks MATCH 'replace the binary' LIMIT 1;
 
 ## 4. Linking results to your own data
 
-`source` is yours: store whatever lets you find the original, and keep everything else (URL, title, author, permissions) in your own tables. A condition on your table does not narrow the search. The join attaches your columns to chunks the search already returned, which is at most the top 50. To search only some rows, add `=` or `IN` on a ragite column in the same query (`source`, `doc_id`, or `rowid`). See [Narrowing a search](#narrowing-a-search). Two common patterns:
+`source` is yours: store whatever lets you find the original, and keep everything else (URL, title, author, permissions) in your own tables. Joining on `source`, `doc_id`, or `rowid` narrows the search to those rows, including a document outside the global top 50. A condition that mentions only your table does not. See [Narrowing a search](#narrowing-a-search). Two common patterns:
 
 **Join on `source`.** Use your own key as `source` and join it back:
 

@@ -858,21 +858,96 @@ fn tc_278_limit_offset_and_order_by_do_not_change_scores() {
     assert_eq!(ordered_ids, all_ids);
 }
 
+fn pages_for(query: &str, kept: &str) -> String {
+    let mut script = buried_keep(query, kept);
+    script.push_str(
+        "CREATE TABLE pages(path TEXT, project TEXT);
+         INSERT INTO pages(path, project) VALUES ('keep', 'wiki'), ('x1', 'a'), ('x2', 'b');\n",
+    );
+    script
+}
+
+fn assert_keep_at_alone_score(rows: &[serde_json::Value], label: &str) {
+    let hit: Vec<_> = rows.iter().filter(|row| row["q"] == label).collect();
+    let kept: Vec<_> = hit.iter().filter(|row| row["source"] == "keep").collect();
+    assert_eq!(kept.len(), 1, "{label}: {hit:?}");
+    assert_score(kept[0]["score"].as_f64().expect("score"), 2.0 / 61.0);
+}
+
 #[test]
-fn tc_279_a_join_predicate_does_not_narrow_the_search() {
+fn tc_279_a_join_key_narrows_the_search() {
     let query = "filtertoken theta";
     let kept = "filtertoken theta sits inside a longer paragraph";
-    let mut script = buried_keep(query, kept);
+    let mut script = pages_for(query, kept);
     script.push_str(&format!(
-        "CREATE TABLE pages(path TEXT, project TEXT);
-         INSERT INTO pages(path, project) VALUES ('keep', 'wiki');
-         SELECT docs.source AS source FROM docs
-           JOIN pages ON pages.path = docs.source
+        "SELECT 'inner' AS q, docs.source AS source, docs.score AS score
+           FROM docs JOIN pages ON pages.path = docs.source
            WHERE pages.project = 'wiki' AND docs MATCH '{query}';"
     ));
     let rows = ok(&script);
     let rows = rows.as_array().unwrap();
+    assert_keep_at_alone_score(rows, "inner");
+}
+
+#[test]
+fn tc_276_join_order_does_not_change_a_join_key() {
+    let query = "filtertoken kappa";
+    let kept = "filtertoken kappa sits inside a longer paragraph";
+    let setup = pages_for(query, kept);
+    let mut script = setup.clone();
+    script.push_str(&format!(
+        "SELECT 'cross' AS q, docs.source AS source, docs.score AS score
+           FROM pages CROSS JOIN docs ON docs.source = pages.path
+           WHERE pages.project = 'wiki' AND docs MATCH '{query}';
+         SELECT 'left' AS q, docs.source AS source, docs.score AS score
+           FROM pages LEFT JOIN docs
+             ON docs.source = pages.path AND docs MATCH '{query}';"
+    ));
+    let rows = ok(&script);
+    let rows = rows.as_array().unwrap();
+    assert_keep_at_alone_score(rows, "cross");
+    assert_keep_at_alone_score(rows, "left");
+
+    let plan = plan_text(&format!(
+        "{setup}
+         EXPLAIN QUERY PLAN
+         SELECT docs.source FROM docs JOIN pages ON pages.path = docs.source
+           WHERE pages.project = 'wiki' AND docs MATCH '{query}';"
+    ));
+    assert!(
+        plan.contains("INDEX 1:2"),
+        "join key stays on the search plan: {plan}"
+    );
+
+    let indexed = plan_text(&format!(
+        "{setup}
+         CREATE INDEX pages_project ON pages(project);
+         EXPLAIN QUERY PLAN
+         SELECT docs.source FROM docs JOIN pages ON pages.path = docs.source
+           WHERE pages.project = 'wiki' AND docs MATCH '{query}';"
+    ));
+    assert!(
+        indexed.contains("INDEX 1:2"),
+        "an index on the other table still pushes the join key: {indexed}"
+    );
+}
+
+#[test]
+fn tc_282_a_predicate_only_on_the_other_table_does_not_narrow() {
+    let query = "filtertoken lambda";
+    let kept = "filtertoken lambda sits inside a longer paragraph";
+    let mut script = pages_for(query, kept);
+    script.push_str(&format!(
+        "SELECT 'on' AS q, docs.source AS source FROM docs
+           JOIN pages ON pages.project = 'wiki'
+           WHERE docs MATCH '{query}';
+         SELECT 'where' AS q, docs.source AS source FROM docs, pages
+           WHERE docs MATCH '{query}' AND pages.project = 'wiki';"
+    ));
+    let rows = ok(&script);
+    let rows = rows.as_array().unwrap();
     assert!(rows.iter().all(|row| row["source"] != "keep"));
+    assert!(!rows.is_empty());
 }
 
 #[test]

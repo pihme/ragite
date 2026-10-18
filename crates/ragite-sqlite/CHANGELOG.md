@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3](https://github.com/pihme/ragite/compare/ragite/v0.3.2...ragite/v0.3.3) - 2026-10-18
+
+### Other
+
+- keep benchmark inputs out of the shell ([#75](https://github.com/pihme/ragite/pull/75))
+- keep a Chunk's three tables behind one module ([#72](https://github.com/pihme/ragite/pull/72))
+- give MATCH one Search module in ragite-sqlite ([#69](https://github.com/pihme/ragite/pull/69))
+- recognize a Document table where the companion marker is written ([#70](https://github.com/pihme/ragite/pull/70))
+- release v0.3.2 ([#62](https://github.com/pihme/ragite/pull/62))
+
 ## [0.3.2](https://github.com/pihme/ragite/compare/ragite/v0.3.1...ragite/v0.3.2) - 2026-10-18
 
 ### Fixed

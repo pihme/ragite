@@ -1,6 +1,6 @@
 # RAGite specification
 
-Status: draft, pre-1.0. Nothing here is implemented yet. Requirements carry stable IDs (`REQ-n`); new ones get the next free number, removed ones are not reused.
+Status: draft, pre-1.0. Nothing here is implemented yet. Requirements carry stable IDs (`REQ-n`); new ones get the next free number, removed ones are not reused. Section 10 records each change, newest first.
 
 ## 1. Goal
 
@@ -78,7 +78,7 @@ A write addresses one Document: the `text` value is the whole input, and RAGite 
 
 The Score is the number Reciprocal Rank Fusion assigns to a Chunk. A higher Score is a better match. A Document's Score is the Score of its best Chunk. The Score column is the virtual-table column named `score`. It is present on both surfaces. On a `MATCH` query it carries that row's Score, and the rows come back best first. On any other query it is null. The caller does not pass a cutoff. Do not reopen.
 
-- **REQ-15** `xBestIndex` recognises `MATCH` and `LIMIT` on both surfaces. `xFilter` embeds the query and merges the vector ranking and the BM25 ranking with Reciprocal Rank Fusion, k = 60, both sides weighted equally. The vector ranking uses cosine similarity (REQ-66). The top row of each list has rank 1 (REQ-80). The caller does not pass weights. RAGite takes the same fixed number of Chunks from each ranking before the fusion. The caller does not pass that depth. The number is chosen in the same benchmark as the default model and the chunk length (section 8.1). A Chunk that appears in only one list still takes part in the fusion. On the Document table, the result is one row per Document, ranked by its best Chunk. On `<name>_chunks`, the result is one row per Chunk. The Score column carries that Score for a `MATCH` and is null otherwise. Do not reopen.
+- **REQ-15** `xBestIndex` recognises `MATCH` on both surfaces. SQLite applies `LIMIT` to the fused rows after that scan. The rankings stay the fixed depth, and each row `LIMIT` returns keeps the Score it has in the same query without `LIMIT` (REQ-38). `xFilter` embeds the query and merges the vector ranking and the BM25 ranking with Reciprocal Rank Fusion, k = 60, both sides weighted equally. The vector ranking uses cosine similarity (REQ-66). The top row of each list has rank 1 (REQ-80). The caller does not pass weights. RAGite takes the same fixed number of Chunks from each ranking before the fusion. The caller does not pass that depth. The number is chosen in the same benchmark as the default model and the chunk length (section 8.1). A Chunk that appears in only one list still takes part in the fusion. On the Document table, the result is one row per Document, ranked by its best Chunk. On `<name>_chunks`, the result is one row per Chunk. The Score column carries that Score for a `MATCH` and is null otherwise. Do not reopen.
 - **REQ-38** A `MATCH` without `LIMIT` returns every fused row. On `<name>_chunks` that is every fused Chunk. On the Document table that is every matching Document. The candidate depth is the only cap RAGite applies. The caller uses `LIMIT` to take fewer rows. Do not reopen.
 - **REQ-43** A `MATCH` whose query has no characters returns no rows and does not fail. RAGite does not run the Model for that query. A query that is only whitespace is a real query and is embedded as given. Do not reopen.
 - **REQ-41** A `MATCH` returns rows ordered by Score, highest first. When two Scores are equal, the Document table orders by `doc_id` ascending. The companion orders by `doc_id` ascending, then by Chunk id ascending. Do not reopen.
@@ -244,3 +244,11 @@ potion-retrieval-32M is the built-in Model. In the Model2Vec benchmark (bench/RE
 - Hybrid search: sqlite-vec + FTS5 with Reciprocal Rank Fusion in SQL.
 - Virtual tables: `sqlite-vec.c` (vec0 with `xBestIndex`/`xUpdate`), the FTS5 source (pattern for `MATCH`), `sqlite-loadable` (Rust FFI pattern; reference only, not a dependency).
 - Considered and not used: `rusqlite` (its `vtab` feature is read-only), `ort` (pulls in a C++ library).
+
+## 10. Change history
+
+Newest first. An entry names the requirements it adds or edits, and why. A requirement marked "Do not reopen" stays closed unless an entry says it was reopened.
+
+### 2026-10-18 — `LIMIT` stays on the fused rows
+
+Reopened the first sentence of REQ-15 and replaced it. That sentence said `xBestIndex` recognises `LIMIT`. SQLite does not pass `LIMIT` into `xBestIndex`: `sqlite3_index_info` has no such field, and SQLite applies `LIMIT` after the scan. The rankings stay the fixed depth from section 8.1. A shorter ranking would assign different Scores. REQ-38 already makes that depth the only cap RAGite applies. The rest of REQ-15 stays closed. TC-25 checks that `LIMIT` returns fewer fused rows and that those rows keep their Scores.

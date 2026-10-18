@@ -245,6 +245,24 @@ fn shadow_names(table: &str) -> [String; 6] {
     ]
 }
 
+/// Written on the companion `CREATE`. A later connection reads it from `sqlite_master`.
+const COMPANION_MARKER: &str = "companion=1";
+
+fn companion_create_sql(companion: &str, parent_literal: &str) -> String {
+    format!(
+        "CREATE VIRTUAL TABLE {companion} USING ragite({COMPANION_MARKER}, parent={parent_literal})"
+    )
+}
+
+/// A stored `CREATE` is a Document table when it uses `ragite` and is not a companion.
+/// `companion = 1` is the same marker with a space, which an older statement can hold.
+pub(crate) fn is_document_vtab(sql: &str) -> bool {
+    let lower = sql.to_ascii_lowercase();
+    let ragite = lower.contains("using ragite") || lower.contains("using \"ragite\"");
+    let companion = lower.contains(COMPANION_MARKER) || lower.contains("companion = 1");
+    ragite && !companion
+}
+
 fn create_shadows(
     db: *mut sqlite3,
     schema: &str,
@@ -311,10 +329,7 @@ fn create_shadows(
     let companion_name = format!("{table}_chunks");
     let key = drop_key(schema, &companion_name);
     ALLOW_CREATE.lock().expect("create set").insert(key.clone());
-    let created = sql::exec(
-        db,
-        &format!("CREATE VIRTUAL TABLE {companion} USING ragite(companion=1, parent={parent})"),
-    );
+    let created = sql::exec(db, &companion_create_sql(&companion, &parent));
     ALLOW_CREATE.lock().expect("create set").remove(&key);
     created?;
     Ok(())

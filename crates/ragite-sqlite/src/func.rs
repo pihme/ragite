@@ -386,7 +386,7 @@ fn find_document_table(db: *mut sqlite3, table_arg: &str) -> Result<DocTable, St
     let mut found_other = false;
     for schema in schemas {
         match table_sql(db, &schema, &name)? {
-            Some((stored, sql)) if is_document_vtab(&sql) => {
+            Some((stored, sql)) if vtab::is_document_vtab(&sql) => {
                 return Ok(DocTable {
                     schema,
                     name: stored,
@@ -453,13 +453,6 @@ fn table_sql(
         stmt.column_text(0).unwrap_or_default(),
         stmt.column_text(1).unwrap_or_default(),
     )))
-}
-
-fn is_document_vtab(sql: &str) -> bool {
-    let lower = sql.to_ascii_lowercase();
-    let ragite = lower.contains("using ragite") || lower.contains("using \"ragite\"");
-    let companion = lower.contains("companion=1") || lower.contains("companion = 1");
-    ragite && !companion
 }
 
 fn db_handle(ctx: *mut sqlite3_context) -> Result<*mut sqlite3, String> {

@@ -597,6 +597,6 @@ SOFTWARE.
 
 The manual Fuzz workflow installs `cargo-fuzz` 0.13.2 and runs it. That crate's `Cargo.toml` says `license = "MIT OR Apache-2.0"`. It is not part of the extension.
 
-The CI `coverage` job runs `cargo clippy` from the Rust toolchain and, when the `SONAR_TOKEN` secret is set, the GitHub Action `SonarSource/sonarqube-scan-action` v8, which downloads and runs SonarScanner CLI 8.1.0.6389 to upload the analysis to SonarQube Cloud. Both the action and SonarScanner CLI are LGPL-3.0 according to their GitHub repositories. They are not part of RAGite and are not shipped.
+The CI `coverage` job runs `cargo clippy` from the Rust toolchain and, when the `SONAR_TOKEN` secret is set, the GitHub Action `SonarSource/sonarqube-scan-action` v8.3.0 (pinned by commit SHA), which downloads and runs SonarScanner CLI 8.1.0.6389 to upload the analysis to SonarQube Cloud. Both the action and SonarScanner CLI are LGPL-3.0 according to their GitHub repositories. They are not part of RAGite and are not shipped.
 
 The manual workflow `.github/workflows/mutants.yml` installs `cargo-mutants` 27.1.0 and runs it against `ragite-core`. That program is not part of RAGite and is not shipped. The published crate's `Cargo.toml` names the license MIT. Its `LICENSE` file states copyright 2021 Martin Pool.

@@ -118,6 +118,10 @@ The Score is the number Reciprocal Rank Fusion assigns to a Chunk. A higher Scor
 - **REQ-18** The extension can be loaded from Python (`sqlite3` with `enable_load_extension`), Go and Node.js. Distribution is planned as prebuilt binaries per platform with thin pip/npm/Go packages, as sqlite-vec does. (Publishing is not part of the first version.)
 - **REQ-87** The load entry point is `sqlite3_ragite_init`. `SELECT load_extension('ragite')` loads that symbol. Do not reopen.
 
+### 4.8 Bundled sqlite-vec
+
+- **REQ-104** Loading the extension registers sqlite-vec 0.1.9 by calling `sqlite3_vec_init` before the `ragite` module. After `load_extension`, that connection has the scalar functions `vec_version`, `vec_debug`, `vec_distance_l2`, `vec_distance_l1`, `vec_distance_hamming`, `vec_distance_cosine`, `vec_length`, `vec_type`, `vec_to_json`, `vec_add`, `vec_sub`, `vec_slice`, `vec_normalize`, `vec_f32`, `vec_bit`, `vec_int8`, `vec_quantize_int8`, and `vec_quantize_binary`, and the modules `vec0` and `vec_each`. `vec_version()` returns `v0.1.9`. `vec_npy_file`, `vec_npy_each`, `vec_static_blob_from_raw`, `vec_static_blobs`, and `vec_static_blob_entries` are absent. The shadow table `<name>_vec` remains the internal `vec0` table in section 5.1. Do not reopen.
+
 ## 5. Source linkage: documents and chunks
 
 Rules that apply to every format are in section 5.1. Each media type has its own subsection. When one requirement covers more than one format, each subsection states the part that applies there, under the same ID.
@@ -253,9 +257,13 @@ potion-retrieval-32M is the built-in Model. In the Model2Vec benchmark (bench/RE
 
 Newest first. An entry names the requirements it adds or edits, and why. A requirement marked "Do not reopen" stays closed unless an entry says it was reopened.
 
+### 2026-10-18 — The extension registers sqlite-vec 0.1.9
+
+Added REQ-104. `sqlite3_ragite_init` already called `sqlite3_vec_init`, and the user guide already used `vec_distance_cosine`, `vec_to_json`, and `vec0`. No requirement named that surface or its version. The numpy entry point is left out of the build, and the static-blob entry point is never called, so those five names stay absent. REQ-99 through REQ-103 belong to the column-filter change, so this requirement is REQ-104. TC-283 checks `vec_version()`, the registered names, and the absent entry points.
+
 ### 2026-10-18 — A join key on a RAGite column narrows the search
 
-Reopened REQ-102 and replaced it. The previous text said SQLite does not pass a predicate from another table to `xBestIndex`. That is true of a predicate that names only the other table. It is not true of a join key. When the other table is the outer loop, SQLite offers `docs.source = pages.path` as a usable `=` on `source`, and the search runs inside that set. An inner join did not do this, because the unconstrained `MATCH` cost the same as the constrained one, so the planner could scan this table first and drop the key. The same query then returned different rows as a `CROSS JOIN` or a `LEFT JOIN`. REQ-99 still applies to the key. The constrained plan now costs less, so the inner join uses it too. TC-279, TC-276, and TC-282 check the three join orders, the index plan, and a predicate that names only the other table.
+Reopened REQ-102 and replaced it. The previous text said SQLite does not pass a predicate from another table to `xBestIndex`. That is true of a predicate that names only the other table. It is not true of a join key. When the other table is the outer loop, SQLite offers `docs.source = pages.path` as a usable `=` on `source`, and the search runs inside that set. An inner join did not do this when the unconstrained `MATCH` cost the same as the constrained one: SQLite then keeps only the plan with fewer tables, and that plan is the unconstrained search. The same query returned different rows as a `CROSS JOIN` or a `LEFT JOIN`. REQ-99 still applies to the key. The unconstrained plan now costs more, so the inner join uses the key too. TC-279, TC-276, and TC-282 check the three join orders, the index plan, and a predicate that names only the other table.
 
 ### 2026-10-18 — A column filter selects Chunks before the rankings are cut
 

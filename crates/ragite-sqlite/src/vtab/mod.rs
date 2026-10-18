@@ -14,13 +14,14 @@ use libsqlite3_sys::{
     sqlite3_value_type, sqlite3_vtab, sqlite3_vtab_cursor,
 };
 use ragite_core::{
-    BuiltinModel, Chunk, Role, TECHNICAL_ID, builtin_model, chunk_docling, chunk_html,
-    chunk_markdown, chunk_plain, heading_path_json, sha256_hex,
+    BuiltinModel, TECHNICAL_ID, builtin_model, chunk_docling, chunk_html, chunk_markdown,
+    chunk_plain, sha256_hex,
 };
 
 use crate::sql::{self, Stmt};
 
 mod search;
+mod shadows;
 
 const DOC_COLUMNS: &str =
     "doc_id INTEGER, text TEXT, source TEXT, format TEXT, hash TEXT, score REAL";
@@ -51,7 +52,7 @@ const COL_META: c_int = 6;
 const COL_C_SCORE: c_int = 7;
 
 static ALLOW_DROP: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
-/// Set only around the companion `CREATE` issued by `create_shadows`.
+/// Set only around the companion `CREATE` issued by `shadows::create_shadows`.
 static ALLOW_CREATE: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 
@@ -198,7 +199,7 @@ unsafe fn create(
     if args.declared_companion || args.declared_parent {
         let key = drop_key(&args.schema, &args.vtab_name);
         let allowed = args.chunks
-            && args.vtab_name == format!("{}_chunks", args.table)
+            && args.vtab_name == shadows::tables(&args.schema, &args.table).companion
             && ALLOW_CREATE.lock().expect("create set").contains(&key);
         if !allowed {
             let which = if args.declared_companion {
@@ -216,31 +217,20 @@ unsafe fn create(
         return Err(err);
     }
     let model_id = resolve_model(&args.model)?;
-    for name in shadow_names(&args.table) {
+    for name in shadows::occupied_names(&args.table) {
         if sql::exists(db, &args.schema, &name)? {
             return Err(format!("name already exists: {name}"));
         }
     }
-    if let Err(err) = create_shadows(db, &args.schema, &args.table, &model_id) {
-        let _ = destroy_shadows(db, &args.schema, &args.table);
+    if let Err(err) = shadows::create_shadows(db, &args.schema, &args.table, &model_id) {
+        let _ = shadows::destroy_shadows(db, &args.schema, &args.table);
         return Err(err);
     }
     if let Err(err) = unsafe { connect(db, argc, argv, pp_vtab, true) } {
-        let _ = destroy_shadows(db, &args.schema, &args.table);
+        let _ = shadows::destroy_shadows(db, &args.schema, &args.table);
         return Err(err);
     }
     Ok(())
-}
-
-fn shadow_names(table: &str) -> [String; 6] {
-    [
-        format!("{table}_chunks"),
-        format!("{table}_documents"),
-        format!("{table}_chunk_rows"),
-        format!("{table}_vec"),
-        format!("{table}_fts"),
-        format!("{table}_model"),
-    ]
 }
 
 /// Written on the companion `CREATE`. A later connection reads it from `sqlite_master`.
@@ -261,105 +251,8 @@ pub(crate) fn is_document_vtab(sql: &str) -> bool {
     ragite && !companion
 }
 
-fn create_shadows(
-    db: *mut sqlite3,
-    schema: &str,
-    table: &str,
-    model_id: &str,
-) -> Result<(), String> {
-    let model = builtin_model()?;
-    let documents = sql::qualified(schema, &format!("{table}_documents"));
-    let chunks = sql::qualified(schema, &format!("{table}_chunk_rows"));
-    let model_table = sql::qualified(schema, &format!("{table}_model"));
-    let vec = sql::qualified(schema, &format!("{table}_vec"));
-    let fts = sql::qualified(schema, &format!("{table}_fts"));
-    let companion = sql::qualified(schema, &format!("{table}_chunks"));
-    sql::exec(
-        db,
-        &format!(
-            "CREATE TABLE {documents} (
-                doc_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                source TEXT NOT NULL,
-                text TEXT NOT NULL,
-                format TEXT NOT NULL,
-                hash TEXT NOT NULL
-            )"
-        ),
-    )?;
-    sql::exec(
-        db,
-        &format!(
-            "CREATE TABLE {chunks} (
-                chunk_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                doc_id INTEGER NOT NULL,
-                start INTEGER NOT NULL,
-                end INTEGER NOT NULL,
-                heading_path TEXT NOT NULL,
-                text TEXT NOT NULL,
-                meta_json TEXT
-            )"
-        ),
-    )?;
-    sql::exec(
-        db,
-        &format!("CREATE TABLE {model_table} (technical_id TEXT NOT NULL)"),
-    )?;
-    let insert = Stmt::prepare(
-        db,
-        &format!("INSERT INTO {model_table} (technical_id) VALUES (?1)"),
-    )?;
-    insert.bind_text(1, model_id)?;
-    insert.step()?;
-    sql::exec(
-        db,
-        &format!(
-            "CREATE VIRTUAL TABLE {vec} USING vec0(embedding float[{}] distance_metric=cosine)",
-            model.dimension()
-        ),
-    )?;
-    sql::exec(
-        db,
-        &format!(
-            "CREATE VIRTUAL TABLE {fts} USING fts5(text, tokenize = 'unicode61', content='', contentless_delete=1)"
-        ),
-    )?;
-    let parent = args_parent_literal(table);
-    let companion_name = format!("{table}_chunks");
-    let key = drop_key(schema, &companion_name);
-    ALLOW_CREATE.lock().expect("create set").insert(key.clone());
-    let created = sql::exec(db, &companion_create_sql(&companion, &parent));
-    ALLOW_CREATE.lock().expect("create set").remove(&key);
-    created?;
-    Ok(())
-}
-
 fn args_parent_literal(table: &str) -> String {
     format!("'{}'", table.replace('\'', "''"))
-}
-
-fn destroy_shadows(db: *mut sqlite3, schema: &str, table: &str) -> Result<(), String> {
-    let companion = format!("{table}_chunks");
-    let key = drop_key(schema, &companion);
-    ALLOW_DROP.lock().expect("drop set").insert(key.clone());
-    let drop_companion = sql::exec(
-        db,
-        &format!(
-            "DROP TABLE IF EXISTS {}",
-            sql::qualified(schema, &companion)
-        ),
-    );
-    ALLOW_DROP.lock().expect("drop set").remove(&key);
-    drop_companion?;
-    for suffix in ["_vec", "_fts", "_chunk_rows", "_documents", "_model"] {
-        sql::exec(
-            db,
-            &format!(
-                "DROP TABLE IF EXISTS {}",
-                sql::qualified(schema, &format!("{table}{suffix}"))
-            ),
-        )?;
-    }
-    Ok(())
 }
 
 unsafe fn connect(
@@ -405,7 +298,7 @@ pub(crate) fn stored_technical_id(
 ) -> Result<String, String> {
     let sql = format!(
         "SELECT technical_id FROM {}",
-        sql::qualified(schema, &format!("{table}_model"))
+        shadows::tables(schema, table).model
     );
     let stmt = Stmt::prepare(db, &sql)?;
     if !stmt.step()? {
@@ -683,13 +576,14 @@ unsafe extern "C" fn vtab_destroy(vtab: *mut sqlite3_vtab) -> c_int {
 unsafe fn destroy(vtab: *mut sqlite3_vtab) -> c_int {
     let table = unsafe { &*vtab.cast::<Vtab>() };
     if table.chunks {
-        let key = drop_key(&table.schema, &format!("{}_chunks", table.doc_name));
+        let companion = shadows::tables(&table.schema, &table.doc_name).companion;
+        let key = drop_key(&table.schema, &companion);
         let allowed = ALLOW_DROP.lock().expect("drop set").remove(&key);
         if !allowed {
             // DROP reports SQLite's generic error. xDestroy's zErrMsg is not copied.
             set_vtab_error(
                 vtab,
-                &format!("cannot drop companion table: {}_chunks", table.doc_name),
+                &format!("cannot drop companion table: {companion}"),
             );
             return SQLITE_ERROR;
         }
@@ -701,7 +595,7 @@ unsafe fn destroy(vtab: *mut sqlite3_vtab) -> c_int {
     let schema = table.schema.clone();
     let name = table.doc_name.clone();
     let db = table.db;
-    if let Err(err) = destroy_shadows(db, &schema, &name) {
+    if let Err(err) = shadows::destroy_shadows(db, &schema, &name) {
         set_vtab_error(vtab, &format!("drop failed: {err}"));
         return SQLITE_ERROR;
     }
@@ -822,48 +716,9 @@ unsafe fn filter(
 
 fn load_rows(vtab: &Vtab) -> Result<Vec<Row>, String> {
     if vtab.chunks {
-        let sql = format!(
-            "SELECT c.chunk_id, c.doc_id, d.source, c.start, c.end, c.heading_path, c.text, c.meta_json
-             FROM {chunks} c
-             JOIN {docs} d ON d.doc_id = c.doc_id
-             ORDER BY c.doc_id, c.chunk_id",
-            chunks = sql::qualified(&vtab.schema, &format!("{}_chunk_rows", vtab.doc_name)),
-            docs = sql::qualified(&vtab.schema, &format!("{}_documents", vtab.doc_name)),
-        );
-        let stmt = Stmt::prepare(vtab.db, &sql)?;
-        let mut rows = Vec::new();
-        while stmt.step()? {
-            rows.push(Row::Chunk {
-                chunk_id: stmt.column_i64(0),
-                doc_id: stmt.column_i64(1),
-                source: stmt.column_text(2).unwrap_or_default(),
-                start: stmt.column_i64(3),
-                end: stmt.column_i64(4),
-                heading_path: stmt.column_text(5).unwrap_or_else(|| "[]".to_string()),
-                text: stmt.column_text(6).unwrap_or_default(),
-                meta_json: stmt.column_text(7),
-                score: None,
-            });
-        }
-        Ok(rows)
+        shadows::scan_chunks(vtab.db, &vtab.schema, &vtab.doc_name)
     } else {
-        let sql = format!(
-            "SELECT doc_id, text, source, format, hash FROM {} ORDER BY doc_id",
-            sql::qualified(&vtab.schema, &format!("{}_documents", vtab.doc_name))
-        );
-        let stmt = Stmt::prepare(vtab.db, &sql)?;
-        let mut rows = Vec::new();
-        while stmt.step()? {
-            rows.push(Row::Doc {
-                doc_id: stmt.column_i64(0),
-                text: stmt.column_text(1).unwrap_or_default(),
-                source: stmt.column_text(2).unwrap_or_default(),
-                format: stmt.column_text(3).unwrap_or_default(),
-                hash: stmt.column_text(4).unwrap_or_default(),
-                score: None,
-            });
-        }
-        Ok(rows)
+        shadows::scan_documents(vtab.db, &vtab.schema, &vtab.doc_name)
     }
 }
 
@@ -880,48 +735,9 @@ unsafe fn rowid_argument(argc: c_int, argv: *mut *mut sqlite3_value) -> Option<i
 
 fn load_row(vtab: &Vtab, rowid: i64) -> Result<Vec<Row>, String> {
     if vtab.chunks {
-        let sql = format!(
-            "SELECT c.chunk_id, c.doc_id, d.source, c.start, c.end, c.heading_path, c.text, c.meta_json
-             FROM {chunks} c
-             JOIN {docs} d ON d.doc_id = c.doc_id
-             WHERE c.chunk_id = ?1",
-            chunks = sql::qualified(&vtab.schema, &format!("{}_chunk_rows", vtab.doc_name)),
-            docs = sql::qualified(&vtab.schema, &format!("{}_documents", vtab.doc_name)),
-        );
-        let stmt = Stmt::prepare(vtab.db, &sql)?;
-        stmt.bind_i64(1, rowid)?;
-        if !stmt.step()? {
-            return Ok(Vec::new());
-        }
-        Ok(vec![Row::Chunk {
-            chunk_id: stmt.column_i64(0),
-            doc_id: stmt.column_i64(1),
-            source: stmt.column_text(2).unwrap_or_default(),
-            start: stmt.column_i64(3),
-            end: stmt.column_i64(4),
-            heading_path: stmt.column_text(5).unwrap_or_else(|| "[]".to_string()),
-            text: stmt.column_text(6).unwrap_or_default(),
-            meta_json: stmt.column_text(7),
-            score: None,
-        }])
+        shadows::chunk_by_id(vtab.db, &vtab.schema, &vtab.doc_name, rowid)
     } else {
-        let sql = format!(
-            "SELECT doc_id, text, source, format, hash FROM {} WHERE doc_id = ?1",
-            sql::qualified(&vtab.schema, &format!("{}_documents", vtab.doc_name))
-        );
-        let stmt = Stmt::prepare(vtab.db, &sql)?;
-        stmt.bind_i64(1, rowid)?;
-        if !stmt.step()? {
-            return Ok(Vec::new());
-        }
-        Ok(vec![Row::Doc {
-            doc_id: stmt.column_i64(0),
-            text: stmt.column_text(1).unwrap_or_default(),
-            source: stmt.column_text(2).unwrap_or_default(),
-            format: stmt.column_text(3).unwrap_or_default(),
-            hash: stmt.column_text(4).unwrap_or_default(),
-            score: None,
-        }])
+        shadows::document_by_id(vtab.db, &vtab.schema, &vtab.doc_name, rowid)
     }
 }
 
@@ -1068,10 +884,8 @@ unsafe fn update(
 ) -> Result<(), String> {
     let table = unsafe { &*vtab.cast::<Vtab>() };
     if table.chunks {
-        return Err(format!(
-            "cannot write companion table: {}_chunks",
-            table.doc_name
-        ));
+        let companion = shadows::tables(&table.schema, &table.doc_name).companion;
+        return Err(format!("cannot write companion table: {companion}"));
     }
     if argc == 1 {
         let rowid =
@@ -1157,7 +971,7 @@ fn insert_document(
     format: &str,
     hash: &str,
 ) -> Result<i64, String> {
-    let documents = sql::qualified(&table.schema, &format!("{}_documents", table.doc_name));
+    let documents = shadows::tables(&table.schema, &table.doc_name).documents;
     let stmt = Stmt::prepare(
         table.db,
         &format!("INSERT INTO {documents} (source, text, format, hash) VALUES (?1, ?2, ?3, ?4)"),
@@ -1181,90 +995,25 @@ fn write_chunks(table: &Vtab, doc_id: i64, text: &str, format: &str) -> Result<(
         _ => chunk_plain(text),
     };
     for chunk in chunks {
-        insert_chunk(table, doc_id, &chunk, model)?;
+        shadows::insert_chunk(
+            table.db,
+            &table.schema,
+            &table.doc_name,
+            doc_id,
+            &chunk,
+            model,
+        )?;
     }
-    Ok(())
-}
-
-fn insert_chunk(
-    table: &Vtab,
-    doc_id: i64,
-    chunk: &Chunk,
-    model: &BuiltinModel,
-) -> Result<(), String> {
-    let rows = sql::qualified(&table.schema, &format!("{}_chunk_rows", table.doc_name));
-    let stmt = Stmt::prepare(
-        table.db,
-        &format!(
-            "INSERT INTO {rows} (doc_id, start, end, heading_path, text, meta_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
-        ),
-    )?;
-    stmt.bind_i64(1, doc_id)?;
-    stmt.bind_i64(2, chunk.start as i64)?;
-    stmt.bind_i64(3, chunk.end as i64)?;
-    stmt.bind_text(4, &heading_path_json(&chunk.heading_path))?;
-    stmt.bind_text(5, &chunk.text)?;
-    if let Some(meta) = &chunk.meta_json {
-        stmt.bind_text(6, meta)?;
-    } else {
-        stmt.bind_null(6)?;
-    }
-    stmt.step()?;
-    let chunk_id = sql::last_insert_rowid(table.db);
-    let blob = model.embed_blob(&chunk.text, Role::Passage);
-    let vec = sql::qualified(&table.schema, &format!("{}_vec", table.doc_name));
-    let stmt = Stmt::prepare(
-        table.db,
-        &format!("INSERT INTO {vec} (rowid, embedding) VALUES (?1, ?2)"),
-    )?;
-    stmt.bind_i64(1, chunk_id)?;
-    stmt.bind_blob(2, &blob)?;
-    stmt.step()?;
-    let fts = sql::qualified(&table.schema, &format!("{}_fts", table.doc_name));
-    let stmt = Stmt::prepare(
-        table.db,
-        &format!("INSERT INTO {fts} (rowid, text) VALUES (?1, ?2)"),
-    )?;
-    stmt.bind_i64(1, chunk_id)?;
-    stmt.bind_text(2, &chunk.text)?;
-    stmt.step()?;
     Ok(())
 }
 
 fn delete_document(table: &Vtab, doc_id: i64) -> Result<(), String> {
-    delete_chunks(table, doc_id)?;
-    let documents = sql::qualified(&table.schema, &format!("{}_documents", table.doc_name));
+    shadows::delete_chunks(table.db, &table.schema, &table.doc_name, doc_id)?;
+    let documents = shadows::tables(&table.schema, &table.doc_name).documents;
     let stmt = Stmt::prepare(
         table.db,
         &format!("DELETE FROM {documents} WHERE doc_id = ?1"),
     )?;
-    stmt.bind_i64(1, doc_id)?;
-    stmt.step()?;
-    Ok(())
-}
-
-fn delete_chunks(table: &Vtab, doc_id: i64) -> Result<(), String> {
-    let rows = sql::qualified(&table.schema, &format!("{}_chunk_rows", table.doc_name));
-    let stmt = Stmt::prepare(
-        table.db,
-        &format!("SELECT chunk_id FROM {rows} WHERE doc_id = ?1"),
-    )?;
-    stmt.bind_i64(1, doc_id)?;
-    let mut ids = Vec::new();
-    while stmt.step()? {
-        ids.push(stmt.column_i64(0));
-    }
-    let vec = sql::qualified(&table.schema, &format!("{}_vec", table.doc_name));
-    let fts = sql::qualified(&table.schema, &format!("{}_fts", table.doc_name));
-    for id in ids {
-        let stmt = Stmt::prepare(table.db, &format!("DELETE FROM {vec} WHERE rowid = ?1"))?;
-        stmt.bind_i64(1, id)?;
-        stmt.step()?;
-        let stmt = Stmt::prepare(table.db, &format!("DELETE FROM {fts} WHERE rowid = ?1"))?;
-        stmt.bind_i64(1, id)?;
-        stmt.step()?;
-    }
-    let stmt = Stmt::prepare(table.db, &format!("DELETE FROM {rows} WHERE doc_id = ?1"))?;
     stmt.bind_i64(1, doc_id)?;
     stmt.step()?;
     Ok(())
@@ -1278,7 +1027,7 @@ fn update_document(
     format: &str,
     hash: Option<String>,
 ) -> Result<(), String> {
-    let documents = sql::qualified(&table.schema, &format!("{}_documents", table.doc_name));
+    let documents = shadows::tables(&table.schema, &table.doc_name).documents;
     let stmt = Stmt::prepare(
         table.db,
         &format!("SELECT text, format, hash FROM {documents} WHERE doc_id = ?1"),
@@ -1308,7 +1057,7 @@ fn update_document(
     stmt.bind_i64(5, doc_id)?;
     stmt.step()?;
     if rechunk {
-        delete_chunks(table, doc_id)?;
+        shadows::delete_chunks(table.db, &table.schema, &table.doc_name, doc_id)?;
         write_chunks(table, doc_id, text, format)?;
     }
     let _ = old_hash;

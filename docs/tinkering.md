@@ -28,9 +28,9 @@ A RAGite build has no runtime switch for chunk size, overlap, fusion constant, w
 | Fusion: `reciprocal_rank_fusion`, `order_fused_chunks`, `best_document_scores`, private `RRF_K` (60) | `crates/ragite-core/src/fusion.rs` |
 | Model, prefixes, `Role`, `BuiltinModel::embed_blob` | `crates/ragite-core/src/model.rs` |
 | Chunk invariants used by the fuzz targets and TC-250 | `crates/ragite-core/src/invariants.rs` |
-| Format check `canonical_format`, chunker dispatch `write_chunks`, row writes `insert_chunk` | `crates/ragite-sqlite/src/vtab/mod.rs` |
+| Format check `canonical_format`, chunker dispatch `write_chunks` | `crates/ragite-sqlite/src/vtab/mod.rs` |
 | Search: `plan`, `rows`, `vector_ids`, `fts_ids`, `fts_phrase` | `crates/ragite-sqlite/src/vtab/search.rs` (`best_index` and `filter` in `vtab/mod.rs` only adapt the SQLite callbacks) |
-| Shadow tables, FTS5 tokenizer, vector distance metric | `create_shadows` in `crates/ragite-sqlite/src/vtab/mod.rs` |
+| Shadow names, lockstep Chunk writes, FTS5 tokenizer, vector distance metric | `crates/ragite-sqlite/src/vtab/shadows.rs` |
 
 `ragite-core` must not link SQLite (REQ-1). Chunking and fusion logic goes there, and `ragite-sqlite` only calls it.
 

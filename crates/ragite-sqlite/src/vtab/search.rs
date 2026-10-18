@@ -18,7 +18,7 @@ use super::{
     COL_CHUNK, COL_C_DOC, COL_C_SOURCE, COL_DOC_ID, COL_END, COL_FORMAT, COL_HASH, COL_META,
     COL_PATH, COL_SOURCE, COL_START, COL_TEXT, Row,
 };
-use crate::sql::{self, Stmt};
+use crate::sql::Stmt;
 
 unsafe extern "C" {
     fn ragite_vtab_in_first(value: *mut sqlite3_value, out: *mut *mut sqlite3_value) -> c_int;
@@ -169,7 +169,8 @@ fn search_rows(table: &Table<'_>, query: &str, eqs: &[PushedTerm]) -> Result<Vec
     let vector = vector_ids(table, &blob, depth, eqs)?;
     let full_text = fts_ids(table, query, depth, eqs)?;
     let fused = reciprocal_rank_fusion(&vector, &full_text);
-    let doc_of = chunk_documents(table, &fused)?;
+    let chunk_ids: Vec<i64> = fused.iter().map(|(id, _)| *id).collect();
+    let doc_of = super::shadows::chunk_doc_ids(table.db, table.schema, table.doc_name, &chunk_ids)?;
     let mut chunks = Vec::new();
     for (chunk_id, score) in fused {
         let Some(doc_id) = doc_of.get(&chunk_id).copied() else {
@@ -266,7 +267,7 @@ fn vector_ids(
     depth: i64,
     eqs: &[PushedTerm],
 ) -> Result<Vec<i64>, String> {
-    let vec_name = sql::qualified(table.schema, &format!("{}_vec", table.doc_name));
+    let vec_name = super::shadows::tables(table.schema, table.doc_name).vec_table;
     let restrict = chunk_id_restriction(table, eqs)?;
     let stmt = Stmt::prepare(
         table.db,
@@ -286,9 +287,9 @@ fn fts_ids(
     depth: i64,
     eqs: &[PushedTerm],
 ) -> Result<Vec<i64>, String> {
-    let bare = format!("{}_fts", table.doc_name);
-    let from = sql::qualified(table.schema, &bare);
-    let name = sql::quote_ident(&bare);
+    let names = super::shadows::tables(table.schema, table.doc_name);
+    let from = names.fts;
+    let name = names.fts_match;
     let restrict = chunk_id_restriction(table, eqs)?;
     let stmt = Stmt::prepare(
         table.db,
@@ -359,8 +360,9 @@ fn chunk_id_restriction(table: &Table<'_>, eqs: &[PushedTerm]) -> Result<String,
             terms.push(format!("{expr} IN ({list})"));
         }
     }
-    let chunks = sql::qualified(table.schema, &format!("{}_chunk_rows", table.doc_name));
-    let docs = sql::qualified(table.schema, &format!("{}_documents", table.doc_name));
+    let names = super::shadows::tables(table.schema, table.doc_name);
+    let chunks = names.chunk_rows;
+    let docs = names.documents;
     Ok(format!(
         " AND rowid IN (SELECT c.chunk_id FROM {chunks} c JOIN {docs} d ON d.doc_id = c.doc_id WHERE {})",
         terms.join(" AND ")
@@ -389,64 +391,14 @@ fn read_ids(stmt: &Stmt) -> Result<Vec<i64>, String> {
     Ok(ids)
 }
 
-fn chunk_documents(table: &Table<'_>, fused: &[(i64, f64)]) -> Result<HashMap<i64, i64>, String> {
-    if fused.is_empty() {
-        return Ok(HashMap::new());
-    }
-    let list = fused
-        .iter()
-        .map(|(id, _)| id.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
-    let rows = sql::qualified(table.schema, &format!("{}_chunk_rows", table.doc_name));
-    let stmt = Stmt::prepare(
-        table.db,
-        &format!("SELECT chunk_id, doc_id FROM {rows} WHERE chunk_id IN ({list})"),
-    )?;
-    let mut map = HashMap::new();
-    while stmt.step()? {
-        map.insert(stmt.column_i64(0), stmt.column_i64(1));
-    }
-    Ok(map)
-}
-
 fn load_scored_chunks(table: &Table<'_>, chunks: &[FusedChunk]) -> Result<Vec<Row>, String> {
-    if chunks.is_empty() {
-        return Ok(Vec::new());
-    }
-    let list = chunks
-        .iter()
-        .map(|chunk| chunk.chunk_id.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
-    let rows = sql::qualified(table.schema, &format!("{}_chunk_rows", table.doc_name));
-    let docs = sql::qualified(table.schema, &format!("{}_documents", table.doc_name));
-    let stmt = Stmt::prepare(
-        table.db,
-        &format!(
-            "SELECT c.chunk_id, c.doc_id, d.source, c.start, c.end, c.heading_path, c.text, c.meta_json
-             FROM {rows} c
-             JOIN {docs} d ON d.doc_id = c.doc_id
-             WHERE c.chunk_id IN ({list})"
-        ),
-    )?;
+    let ids: Vec<i64> = chunks.iter().map(|chunk| chunk.chunk_id).collect();
+    let rows = super::shadows::chunks_for_ids(table.db, table.schema, table.doc_name, &ids)?;
     let mut by_id = HashMap::new();
-    while stmt.step()? {
-        let chunk_id = stmt.column_i64(0);
-        by_id.insert(
-            chunk_id,
-            Row::Chunk {
-                chunk_id,
-                doc_id: stmt.column_i64(1),
-                source: stmt.column_text(2).unwrap_or_default(),
-                start: stmt.column_i64(3),
-                end: stmt.column_i64(4),
-                heading_path: stmt.column_text(5).unwrap_or_else(|| "[]".to_string()),
-                text: stmt.column_text(6).unwrap_or_default(),
-                meta_json: stmt.column_text(7),
-                score: None,
-            },
-        );
+    for row in rows {
+        if let Row::Chunk { chunk_id, .. } = &row {
+            by_id.insert(*chunk_id, row);
+        }
     }
     let mut out = Vec::with_capacity(chunks.len());
     for chunk in chunks {
@@ -462,35 +414,13 @@ fn load_scored_chunks(table: &Table<'_>, chunks: &[FusedChunk]) -> Result<Vec<Ro
 }
 
 fn load_scored_docs(table: &Table<'_>, docs: &[(i64, f64)]) -> Result<Vec<Row>, String> {
-    if docs.is_empty() {
-        return Ok(Vec::new());
-    }
-    let list = docs
-        .iter()
-        .map(|(id, _)| id.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
-    let documents = sql::qualified(table.schema, &format!("{}_documents", table.doc_name));
-    let stmt = Stmt::prepare(
-        table.db,
-        &format!(
-            "SELECT doc_id, text, source, format, hash FROM {documents} WHERE doc_id IN ({list})"
-        ),
-    )?;
+    let ids: Vec<i64> = docs.iter().map(|(id, _)| *id).collect();
+    let rows = super::shadows::documents_for_ids(table.db, table.schema, table.doc_name, &ids)?;
     let mut by_id = HashMap::new();
-    while stmt.step()? {
-        let doc_id = stmt.column_i64(0);
-        by_id.insert(
-            doc_id,
-            Row::Doc {
-                doc_id,
-                text: stmt.column_text(1).unwrap_or_default(),
-                source: stmt.column_text(2).unwrap_or_default(),
-                format: stmt.column_text(3).unwrap_or_default(),
-                hash: stmt.column_text(4).unwrap_or_default(),
-                score: None,
-            },
-        );
+    for row in rows {
+        if let Row::Doc { doc_id, .. } = &row {
+            by_id.insert(*doc_id, row);
+        }
     }
     let mut out = Vec::with_capacity(docs.len());
     for (doc_id, score) in docs {

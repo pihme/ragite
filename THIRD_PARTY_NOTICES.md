@@ -1,6 +1,6 @@
 # Third-party software
 
-ragite itself is dual-licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE). This file lists the third-party software it contains or runs, with the notices their licenses ask for.
+RAGite itself is dual-licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE). This file lists the third-party software it contains or runs, with the notices their licenses ask for.
 
 Cargo crate licenses below are taken from `cargo metadata` for the versions in `Cargo.lock`, or from the crate's LICENSE file when the metadata field is empty. Nothing below is guessed.
 
@@ -16,7 +16,7 @@ Public domain. The headers `third_party/sqlite/sqlite3.h` and `third_party/sqlit
 > May you find forgiveness for yourself and forgive others.
 > May you share freely, never taking more than you give.
 
-The extension does not compile or link `sqlite3.c`. A host application supplies SQLite and loads ragite.
+The extension does not compile or link `sqlite3.c`. A host application supplies SQLite and loads RAGite.
 
 ### sqlite-vec 0.1.9
 
@@ -270,7 +270,7 @@ That revision's file list has no LICENSE file. The model card `README.md` front 
 
 These are the crates in `Cargo.lock`. The license column is the `license` field from `cargo metadata` for that version. `model2vec-rs` has no `license` field; its `license_file` is `LICENSE`, and that file is the MIT license with the line `Copyright (c) 2025 The Minish Lab`.
 
-Where a license expression offers a choice, ragite takes MIT or Apache-2.0. Those texts are reproduced under sqlite-vec above. No resolved crate ships a NOTICE file.
+Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. Those texts are reproduced under sqlite-vec above. No resolved crate ships a NOTICE file.
 
 | Crate | Version | License |
 | --- | --- | --- |
@@ -517,7 +517,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Fuzz harness (not shipped)
 
-The `fuzz/` workspace is not linked into the extension and is not part of `make test`. Its lockfile is `fuzz/Cargo.lock`. The crates below are in that lock and absent from the root `Cargo.lock`, except `getrandom` 0.4.3 and `r-efi` 6.0.0, which are extra versions of crates already listed above. The license column is the `license` field from `cargo metadata --manifest-path fuzz/Cargo.toml`. Where a license expression offers a choice, ragite takes MIT or Apache-2.0. No resolved crate in that lock ships a NOTICE file.
+The `fuzz/` workspace is not linked into the extension and is not part of `make test`. Its lockfile is `fuzz/Cargo.lock`. The crates below are in that lock and absent from the root `Cargo.lock`, except `getrandom` 0.4.3 and `r-efi` 6.0.0, which are extra versions of crates already listed above. The license column is the `license` field from `cargo metadata --manifest-path fuzz/Cargo.toml`. Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. No resolved crate in that lock ships a NOTICE file.
 
 | Crate | Version | License |
 | --- | --- | --- |
@@ -591,10 +591,10 @@ SOFTWARE.
 
 ## External programs (run, not included)
 
-`make test` runs the `sqlite3` command-line program and loads the ragite extension into it. That program is not part of ragite. The extension does not link a copy of SQLite.
+`make test` runs the `sqlite3` command-line program and loads the RAGite extension into it. That program is not part of RAGite. The extension does not link a copy of SQLite.
 
-`make test` also runs Python 3, Node.js, and Go. Python uses its standard-library `sqlite3` module. Node.js uses its built-in `node:sqlite` module. The Go test is cgo linked to the host `libsqlite3` and does not download modules. Those programs are not part of ragite, and the tests do not install a ragite package.
+`make test` also runs Python 3, Node.js, and Go. Python uses its standard-library `sqlite3` module. Node.js uses its built-in `node:sqlite` module. The Go test is cgo linked to the host `libsqlite3` and does not download modules. Those programs are not part of RAGite, and the tests do not install a RAGite package.
 
 The manual Fuzz workflow installs `cargo-fuzz` 0.13.2 and runs it. That crate's `Cargo.toml` says `license = "MIT OR Apache-2.0"`. It is not part of the extension.
 
-The manual workflow `.github/workflows/mutants.yml` installs `cargo-mutants` 27.1.0 and runs it against `ragite-core`. That program is not part of ragite and is not shipped. The published crate's `Cargo.toml` names the license MIT. Its `LICENSE` file states copyright 2021 Martin Pool.
+The manual workflow `.github/workflows/mutants.yml` installs `cargo-mutants` 27.1.0 and runs it against `ragite-core`. That program is not part of RAGite and is not shipped. The published crate's `Cargo.toml` names the license MIT. Its `LICENSE` file states copyright 2021 Martin Pool.

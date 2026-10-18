@@ -23,14 +23,7 @@ jobs:
           lfs: true
 
       - name: Require the smudged model files
-        run: |
-          for file in models/*/model.safetensors models/*/tokenizer.json; do
-            test -s "$file"
-            if head -c 40 "$file" | grep -q 'git-lfs'; then
-              echo "model file is still a Git LFS pointer: $file (check out with lfs: true / git lfs pull)"
-              exit 1
-            fi
-          done
+        run: bash .github/scripts/require-smudged-models.sh
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -61,6 +54,9 @@ jobs:
           lfs: true
           persist-credentials: false
 
+      - name: Require the smudged model files
+        run: bash .github/scripts/require-smudged-models.sh
+
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install SQLite
@@ -88,14 +84,7 @@ jobs:
 
       - name: Require the smudged model files
         shell: bash
-        run: |
-          for file in models/*/model.safetensors models/*/tokenizer.json; do
-            test -s "$file"
-            if head -c 40 "$file" | grep -q 'git-lfs'; then
-              echo "model file is still a Git LFS pointer: $file (check out with lfs: true / git lfs pull)"
-              exit 1
-            fi
-          done
+        run: bash .github/scripts/require-smudged-models.sh
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -127,6 +116,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           lfs: true
+
+      - name: Require the smudged model files
+        run: bash .github/scripts/require-smudged-models.sh
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -178,14 +170,7 @@ jobs:
           persist-credentials: false
 
       - name: Require the smudged model files
-        run: |
-          for file in models/*/model.safetensors models/*/tokenizer.json; do
-            test -s "$file"
-            if head -c 40 "$file" | grep -q 'git-lfs'; then
-              echo "model file is still a Git LFS pointer: $file (check out with lfs: true / git lfs pull)"
-              exit 1
-            fi
-          done
+        run: bash .github/scripts/require-smudged-models.sh
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -265,6 +250,9 @@ jobs:
           lfs: true
           persist-credentials: false
 
+      - name: Require the smudged model files
+        run: bash .github/scripts/require-smudged-models.sh
+
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Open the release pull request
@@ -290,14 +278,7 @@ jobs:
           persist-credentials: false
 
       - name: Require the smudged model files
-        run: |
-          for file in models/*/model.safetensors models/*/tokenizer.json; do
-            test -s "$file"
-            if head -c 40 "$file" | grep -q 'git-lfs'; then
-              echo "model file is still a Git LFS pointer: $file (check out with lfs: true / git lfs pull)"
-              exit 1
-            fi
-          done
+        run: bash .github/scripts/require-smudged-models.sh
 
       - uses: dtolnay/rust-toolchain@stable
 

@@ -85,7 +85,7 @@ Unless a case says otherwise:
 
 ## REQ-15
 
-- **TC-25** On `docs` and on `docs_chunks`, a `MATCH` query embeds the query and returns fused rows. `LIMIT` reduces how many of those rows come back.
+- **TC-25** On `docs` and on `docs_chunks`, a `MATCH` query embeds the query and returns fused rows. `LIMIT` reduces how many of those rows come back. Each row it returns keeps the Score that row has in the same query without `LIMIT`.
 - **TC-26** The fused Score uses Reciprocal Rank Fusion with k = 60 and equal weights. A test of the fusion function with known ranks matches `1/(60+rank)` summed across the lists the Chunk appears in.
 - **TC-27** The caller has no argument for weights, for k, or for candidate depth. Two searches of the same table and query produce the same Scores when the stored Chunks are unchanged.
 - **TC-28** A Chunk that is present in only one of the two ranked lists still receives a Score and can appear in the result.

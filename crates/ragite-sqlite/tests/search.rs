@@ -138,8 +138,8 @@ fn tc_103_tc_104_limit_shortens_the_fused_list() {
          INSERT INTO docs(text) VALUES ('other thing');
          INSERT INTO docs(text) VALUES ('target phrase');
          SELECT doc_id, score FROM docs WHERE docs MATCH 'target phrase';
-         SELECT doc_id FROM docs WHERE docs MATCH 'target phrase' LIMIT 2;
-         SELECT doc_id FROM docs_chunks WHERE docs_chunks MATCH 'target phrase' LIMIT 1;");
+         SELECT doc_id, score FROM docs WHERE docs MATCH 'target phrase' LIMIT 2;
+         SELECT doc_id, score FROM docs_chunks WHERE docs_chunks MATCH 'target phrase' LIMIT 1;");
     assert_eq!(cell(&rows, 0, "doc_id"), "3");
     assert_score(score(&rows, 0), 2.0 / 61.0);
     let mut rest = vec![cell(&rows, 1, "doc_id"), cell(&rows, 2, "doc_id")];
@@ -147,7 +147,15 @@ fn tc_103_tc_104_limit_shortens_the_fused_list() {
     assert_eq!(rest, vec!["1".to_string(), "2".to_string()]);
     assert_eq!(rows.as_array().unwrap().len(), 6);
     assert_eq!(cell(&rows, 3, "doc_id"), "3");
+    assert_score(score(&rows, 3), 2.0 / 61.0);
+    let second = cell(&rows, 4, "doc_id");
+    let second_score = score(&rows, 4);
+    let unlimited = (1..=2)
+        .find(|index| cell(&rows, *index, "doc_id") == second)
+        .expect("LIMIT row is one of the fused rows");
+    assert_score(second_score, score(&rows, unlimited));
     assert_eq!(cell(&rows, 5, "doc_id"), "3");
+    assert_score(score(&rows, 5), 2.0 / 61.0);
 }
 
 #[test]

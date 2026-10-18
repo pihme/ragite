@@ -114,6 +114,10 @@ The Score is the number Reciprocal Rank Fusion assigns to a Chunk. A higher Scor
 - **REQ-18** The extension can be loaded from Python (`sqlite3` with `enable_load_extension`), Go and Node.js. Distribution is planned as prebuilt binaries per platform with thin pip/npm/Go packages, as sqlite-vec does. (Publishing is not part of the first version.)
 - **REQ-87** The load entry point is `sqlite3_ragite_init`. `SELECT load_extension('ragite')` loads that symbol. Do not reopen.
 
+### 4.8 Bundled sqlite-vec
+
+- **REQ-104** Loading the extension registers sqlite-vec 0.1.9 by calling `sqlite3_vec_init` before the `ragite` module. After `load_extension`, that connection has the scalar functions `vec_version`, `vec_debug`, `vec_distance_l2`, `vec_distance_l1`, `vec_distance_hamming`, `vec_distance_cosine`, `vec_length`, `vec_type`, `vec_to_json`, `vec_add`, `vec_sub`, `vec_slice`, `vec_normalize`, `vec_f32`, `vec_bit`, `vec_int8`, `vec_quantize_int8`, and `vec_quantize_binary`, and the modules `vec0` and `vec_each`. `vec_version()` returns `v0.1.9`. `vec_npy_file`, `vec_npy_each`, `vec_static_blob_from_raw`, `vec_static_blobs`, and `vec_static_blob_entries` are absent. The shadow table `<name>_vec` remains the internal `vec0` table in section 5.1. Do not reopen.
+
 ## 5. Source linkage: documents and chunks
 
 Rules that apply to every format are in section 5.1. Each media type has its own subsection. When one requirement covers more than one format, each subsection states the part that applies there, under the same ID.
@@ -251,4 +255,8 @@ Newest first. An entry names the requirements it adds or edits, and why. A requi
 
 ### 2026-10-18 — `LIMIT` stays on the fused rows
 
-Reopened the first sentence of REQ-15 and replaced it. That sentence said `xBestIndex` recognises `LIMIT`. SQLite does not pass `LIMIT` into `xBestIndex`: `sqlite3_index_info` has no such field, and SQLite applies `LIMIT` after the scan. The rankings stay the fixed depth from section 8.1. A shorter ranking would assign different Scores. REQ-38 already makes that depth the only cap RAGite applies. The rest of REQ-15 stays closed. TC-25 checks that `LIMIT` returns fewer fused rows and that those rows keep their Scores.
+Reopened the first sentence of REQ-15 and replaced it. That sentence said `xBestIndex` recognises `LIMIT`. SQLite can pass `LIMIT` and `OFFSET` to `xBestIndex` as constraints (`SQLITE_INDEX_CONSTRAINT_LIMIT` and `SQLITE_INDEX_CONSTRAINT_OFFSET`, since 3.38.0). RAGite does not consume them. Shrinking either ranking to the `LIMIT` would change the Scores (REQ-38). SQLite applies `LIMIT` to the fused rows. The rankings stay the fixed depth from section 8.1. REQ-38 already makes that depth the only cap RAGite applies. The rest of REQ-15 stays closed. TC-25 checks that `LIMIT` returns fewer fused rows and that those rows keep their Scores.
+
+### 2026-10-18 — The extension registers sqlite-vec 0.1.9
+
+Added REQ-104. `sqlite3_ragite_init` already called `sqlite3_vec_init`, and the user guide already used `vec_distance_cosine`, `vec_to_json`, and `vec0`. No requirement named that surface or its version. The numpy entry point is left out of the build, and the static-blob entry point is never called, so those five names stay absent. REQ-99 through REQ-103 belong to the column-filter change, so this requirement is REQ-104. TC-283 checks `vec_version()`, the registered names, and the absent entry points.

@@ -15,6 +15,10 @@ concurrency:
 
 jobs:
   test:
+    # A release-plz pull request only bumps versions and changelogs; the code was
+    # tested on main. It gets release-pr-check instead. The push to main after the
+    # merge still runs every job.
+    if: ${{ !(startsWith(github.head_ref || github.ref_name, 'release-plz-') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -46,6 +50,7 @@ jobs:
 
   # The documented commands without the Makefile, on a fresh checkout (TC-270).
   fresh-checkout:
+    if: ${{ !(startsWith(github.head_ref || github.ref_name, 'release-plz-') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -71,6 +76,7 @@ jobs:
   # Apple's sqlite3 cannot load extensions. Homebrew's can. Windows uses the sqlite package.
   parity-platform:
     name: parity (${{ matrix.os }})
+    if: ${{ !(startsWith(github.head_ref || github.ref_name, 'release-plz-') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -112,6 +118,7 @@ jobs:
   # The same job feeds SonarQube Cloud (coverage plus Clippy findings), so the
   # instrumented build runs only once.
   coverage:
+    if: ${{ !(startsWith(github.head_ref || github.ref_name, 'release-plz-') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -182,6 +189,7 @@ jobs:
 
   # Build and test the release profile that the published extension uses.
   release-profile:
+    if: ${{ !(startsWith(github.head_ref || github.ref_name, 'release-plz-') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -228,6 +236,21 @@ jobs:
             echo '| --- | --- |'
             echo "| $AFTER_B | $AFTER_S |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Replaces the jobs above on release-plz-* branches: versions, Cargo.lock and
+  # changelog must agree, and nothing else may change.
+  release-pr-check:
+    if: ${{ startsWith(github.head_ref || github.ref_name, 'release-plz-') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check versions and changelog
+        run: bash .github/scripts/check-release-pr.sh origin/main
 
   # release-plz only sees commits that touch a crate directory. A change to the
   # workspace Cargo.toml or the built-in Model must refresh the matching
@@ -286,7 +309,11 @@ jobs:
         with:
           command: release-pr
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A pull request opened with GITHUB_TOKEN gets its CI runs held at
+          # "action_required" until someone approves them. With a RELEASE_TOKEN
+          # secret (fine-grained token: Contents and Pull requests read/write on
+          # this repository) the release pull request runs CI on its own.
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
   # Tag and publish the GitHub Release only when that pull request merges.
   release-plz-release:

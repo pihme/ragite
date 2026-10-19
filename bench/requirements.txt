@@ -1,5 +1,5 @@
 # Benchmark harness only; never needed for building or testing ragite.
 datasets==3.*
 numpy
-model2vec==0.6.0
+model2vec==0.10.0
 sentence-transformers==5.*

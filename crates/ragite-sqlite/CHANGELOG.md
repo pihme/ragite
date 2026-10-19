@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1](https://github.com/pihme/ragite/compare/ragite/v1.0.0...ragite/v1.0.1) - 2026-10-19
+
+### Fixed
+
+- *(deps)* bump sha2 from 0.10.9 to 0.11.1 ([#78](https://github.com/pihme/ragite/pull/78))
+
 ## [1.0.0](https://github.com/pihme/ragite/compare/ragite/v0.3.3...ragite/v1.0.0) - 2026-10-18
 
 ### Fixed

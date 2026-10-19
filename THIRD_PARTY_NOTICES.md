@@ -280,19 +280,20 @@ Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. Thos
 | autocfg | 1.5.1 | Apache-2.0 OR MIT |
 | base64 | 0.13.1 | MIT/Apache-2.0 |
 | bitflags | 2.13.2 | MIT OR Apache-2.0 |
-| block-buffer | 0.10.4 | MIT OR Apache-2.0 |
+| block-buffer | 0.12.1 | MIT OR Apache-2.0 |
 | bumpalo | 3.20.3 | MIT OR Apache-2.0 |
 | castaway | 0.2.4 | MIT |
 | cc | 1.8.0 | MIT OR Apache-2.0 |
 | cfg-if | 1.0.5 | MIT OR Apache-2.0 |
 | compact_str | 0.9.1 | MIT |
 | console | 0.15.11 | MIT |
-| cpufeatures | 0.2.17 | MIT OR Apache-2.0 |
+| const-oid | 0.10.2 | Apache-2.0 OR MIT |
+| cpufeatures | 0.3.1 | MIT OR Apache-2.0 |
 | crossbeam-deque | 0.8.8 | MIT OR Apache-2.0 |
 | crossbeam-epoch | 0.9.21 | MIT OR Apache-2.0 |
 | crossbeam-utils | 0.8.23 | MIT OR Apache-2.0 |
 | crunchy | 0.2.4 | MIT |
-| crypto-common | 0.1.7 | MIT OR Apache-2.0 |
+| crypto-common | 0.2.2 | MIT OR Apache-2.0 |
 | darling | 0.20.11 | MIT |
 | darling_core | 0.20.11 | MIT |
 | darling_macro | 0.20.11 | MIT |
@@ -300,7 +301,7 @@ Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. Thos
 | derive_builder | 0.20.2 | MIT OR Apache-2.0 |
 | derive_builder_core | 0.20.2 | MIT OR Apache-2.0 |
 | derive_builder_macro | 0.20.2 | MIT OR Apache-2.0 |
-| digest | 0.10.7 | MIT OR Apache-2.0 |
+| digest | 0.11.3 | MIT OR Apache-2.0 |
 | either | 1.19.0 | MIT OR Apache-2.0 |
 | encode_unicode | 1.0.0 | Apache-2.0 OR MIT |
 | esaxx-rs | 0.1.10 | Apache-2.0 |
@@ -309,9 +310,9 @@ Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. Thos
 | futures-core | 0.3.34 | MIT OR Apache-2.0 |
 | futures-task | 0.3.34 | MIT OR Apache-2.0 |
 | futures-util | 0.3.34 | MIT OR Apache-2.0 |
-| generic-array | 0.14.7 | MIT |
 | getrandom | 0.3.4 | MIT OR Apache-2.0 |
 | half | 2.7.1 | MIT OR Apache-2.0 |
+| hybrid-array | 0.4.15 | MIT OR Apache-2.0 |
 | ident_case | 1.0.1 | MIT/Apache-2.0 |
 | indicatif | 0.17.11 | MIT |
 | itertools | 0.14.0 | MIT OR Apache-2.0 |
@@ -364,7 +365,7 @@ Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. Thos
 | serde_core | 1.0.229 | MIT OR Apache-2.0 |
 | serde_derive | 1.0.229 | MIT OR Apache-2.0 |
 | serde_json | 1.0.154 | MIT OR Apache-2.0 |
-| sha2 | 0.10.9 | MIT OR Apache-2.0 |
+| sha2 | 0.11.1 | MIT OR Apache-2.0 |
 | shlex | 2.0.1 | MIT OR Apache-2.0 |
 | slab | 0.4.12 | MIT |
 | smallvec | 1.16.3 | MIT OR Apache-2.0 |

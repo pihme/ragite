@@ -7,9 +7,8 @@
 git_only = true
 release_always = false
 semver_check = false
-# feat bumps minor before 1.0, matching the rule in AGENTS.md.
-# A breaking change before 1.0 still bumps minor. Choose 1.0.0 by editing
-# the version in the release pull request.
+# Since 1.0 the crates follow SemVer: feat bumps minor, fix/perf patch,
+# breaking changes major (see Versions and releases in AGENTS.md).
 features_always_increment_minor = true
 repo_url = "https://github.com/pihme/ragite"
 

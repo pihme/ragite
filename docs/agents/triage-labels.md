@@ -8,11 +8,12 @@ The engineering skills (`triage` and friends) speak in canonical roles. This tab
 | category: enhancement | `enhancement` | New feature or improvement |
 | `needs-triage` | `needs-triage` | Maintainer needs to evaluate this issue |
 | `needs-info` | `needs-info` | Waiting on the reporter for more information |
-| `ready-for-agent` | `ready-for-agent` | Fully specified, ready for an external agent to pick up |
-| `ready-for-bot` | `ready-for-bot` | Ready for an in-house bot (Maintainer) to pick up |
+| `ready-for-agent` | `ready-for-development` | Larger feature or code work, fully specified, for Developer |
+| (team) | `ready-for-maintainer` | Website, docs fix or smaller change, for Maintainer |
 | `ready-for-qa` | `ready-for-qa` | Ready for QA review and independent testing |
-| `ready-for-human` | `ready-for-human` | Needs a human to implement or decide |
+| `ready-for-human` | `ready-for-human` | Needs the owner to implement or decide |
+| (team) | `needs-input` | Waiting for input or a decision from the owner |
 | `wontfix` | `wontfix` | Will not be actioned |
 
-Pickup labels: `ready-for-bot` is for in-house bots (Maintainer), `ready-for-agent` is always for an external agent, and `ready-for-qa` is for QA.
+Pickup labels: `ready-for-maintainer` is for Maintainer (website, docs fixes, smaller changes), `ready-for-development` is for Developer (larger feature and code work), and `ready-for-qa` is for QA. Colors and owners: `team.md`.
 

@@ -2,4 +2,4 @@
 datasets==5.*
 numpy
 model2vec==0.10.0
-sentence-transformers==5.*
+sentence-transformers==6.*

@@ -31,13 +31,10 @@ jobs:
           lfs: true
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
+      - uses: cachix/install-nix-action@v31
+      - run: bash .github/scripts/load-nix-env.sh ./nix/bench
       - name: Install harness
-        run: pip install -r bench/requirements.txt
+        run: python -m pip install -r bench/requirements.txt
       # Workflow inputs are passed as environment variables. Pasting an input
       # into a run script would let a model name or a dataset string execute as shell.
       - name: Build extension with the candidate

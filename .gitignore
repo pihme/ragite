@@ -24,3 +24,6 @@ __pycache__/
 lcov.info
 clippy-report.json
 .scannerwork/
+
+# Nix dev shells
+.pip/

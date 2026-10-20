@@ -34,7 +34,7 @@ jobs:
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/bench
       - name: Install harness
-        run: python -m pip install -r bench/requirements.txt
+        run: pip install -r bench/requirements.txt
       # Workflow inputs are passed as environment variables. Pasting an input
       # into a run script would let a model name or a dataset string execute as shell.
       - name: Build extension with the candidate

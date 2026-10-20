@@ -14,8 +14,8 @@
         default = pkgs.mkShell {
           packages = with pkgs; [ sqlite pkg-config ];
             inputsFrom = [ reference-env.devShells.${system}.default ];
-            # CI exports plain LIBRARY_PATH/LD_LIBRARY_PATH; the cc wrapper ignores
-            # plain NIX_LDFLAGS, so cgo (-l:libsqlite3.so.0) needs these.
+            # cgo asks for libsqlite3.so.0 by file name. gcc searches
+            # LIBRARY_PATH, and the loader needs LD_LIBRARY_PATH afterwards.
             shellHook = ''
               export LIBRARY_PATH=${pkgs.sqlite.out}/lib''${LIBRARY_PATH:+:$LIBRARY_PATH}
               export LD_LIBRARY_PATH=${pkgs.sqlite.out}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}

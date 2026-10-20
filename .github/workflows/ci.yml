@@ -29,7 +29,7 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: cachix/install-nix-action@v31
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/bindings
 
       - name: Test
@@ -49,7 +49,7 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: cachix/install-nix-action@v31
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
 
       - name: Commands from CONTRIBUTING.md
@@ -120,7 +120,7 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: cachix/install-nix-action@v31
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/coverage
 
       - name: Measure coverage
@@ -176,7 +176,7 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: cachix/install-nix-action@v31
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
 
       - name: Build the release extension
@@ -275,7 +275,7 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: cachix/install-nix-action@v31
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
 
       - name: Open the release pull request
@@ -307,7 +307,7 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: cachix/install-nix-action@v31
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
 
       - name: Cut the release

@@ -29,21 +29,8 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: tests/languages/go/go.mod
-          cache: false
-
-      - name: Install SQLite
-        run: sudo apt-get update && sudo apt-get install -y sqlite3 libsqlite3-0
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
+      - run: bash .github/scripts/load-nix-env.sh ./nix/bindings
 
       - name: Test
         run: make test
@@ -62,10 +49,8 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Install SQLite
-        run: sudo apt-get update && sudo apt-get install -y sqlite3
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
+      - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
 
       - name: Commands from CONTRIBUTING.md
         run: |
@@ -135,18 +120,8 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: llvm-tools-preview, clippy
-
-      - uses: Swatinem/rust-cache@v2
-
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov
-
-      - name: Install SQLite
-        run: sudo apt-get update && sudo apt-get install -y sqlite3 libsqlite3-0
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
+      - run: bash .github/scripts/load-nix-env.sh ./nix/coverage
 
       - name: Measure coverage
         # The integration tests load target/debug/libragite.so through sqlite3,
@@ -201,10 +176,8 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Install sqlite3
-        run: sudo apt-get update && sudo apt-get install -y sqlite3
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
+      - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
 
       - name: Build the release extension
         run: |
@@ -302,7 +275,8 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
+      - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
 
       - name: Open the release pull request
         uses: release-plz/action@v0.5
@@ -333,9 +307,8 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
+      - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
 
       - name: Cut the release
         id: release

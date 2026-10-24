@@ -283,7 +283,7 @@ Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. Thos
 | block-buffer | 0.12.1 | MIT OR Apache-2.0 |
 | bumpalo | 3.20.3 | MIT OR Apache-2.0 |
 | castaway | 0.2.4 | MIT |
-| cc | 1.8.0 | MIT OR Apache-2.0 |
+| cc | 1.9.0 | MIT OR Apache-2.0 |
 | cfg-if | 1.0.5 | MIT OR Apache-2.0 |
 | compact_str | 0.9.1 | MIT |
 | console | 0.15.11 | MIT |

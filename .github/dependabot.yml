@@ -78,8 +78,16 @@ updates:
     groups:
       actions-minor-and-patch:
         update-types: [minor, patch]
+  # All Nix shells in one block and one group: one bundled PR per run.
   - package-ecosystem: nix
-    directory: /nix/reference-env
+    directories:
+      - /nix/reference-env
+      - /nix/sqlite
+      - /nix/bindings
+      - /nix/coverage
+      - /nix/mutants
+      - /nix/fuzz
+      - /nix/bench
     schedule:
       interval: weekly
       day: saturday
@@ -88,63 +96,6 @@ updates:
     commit-message:
       prefix: chore
       include: scope
-  - package-ecosystem: nix
-    directory: /nix/sqlite
-    schedule:
-      interval: weekly
-      day: saturday
-    open-pull-requests-limit: 5
-    labels: [dependencies]
-    commit-message:
-      prefix: chore
-      include: scope
-  - package-ecosystem: nix
-    directory: /nix/bindings
-    schedule:
-      interval: weekly
-      day: saturday
-    open-pull-requests-limit: 5
-    labels: [dependencies]
-    commit-message:
-      prefix: chore
-      include: scope
-  - package-ecosystem: nix
-    directory: /nix/coverage
-    schedule:
-      interval: weekly
-      day: saturday
-    open-pull-requests-limit: 5
-    labels: [dependencies]
-    commit-message:
-      prefix: chore
-      include: scope
-  - package-ecosystem: nix
-    directory: /nix/mutants
-    schedule:
-      interval: weekly
-      day: saturday
-    open-pull-requests-limit: 5
-    labels: [dependencies]
-    commit-message:
-      prefix: chore
-      include: scope
-  - package-ecosystem: nix
-    directory: /nix/fuzz
-    schedule:
-      interval: weekly
-      day: saturday
-    open-pull-requests-limit: 5
-    labels: [dependencies]
-    commit-message:
-      prefix: chore
-      include: scope
-  - package-ecosystem: nix
-    directory: /nix/bench
-    schedule:
-      interval: weekly
-      day: saturday
-    open-pull-requests-limit: 5
-    labels: [dependencies]
-    commit-message:
-      prefix: chore
-      include: scope
+    groups:
+      nix:
+        patterns: ["*"]

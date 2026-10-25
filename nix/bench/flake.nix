@@ -16,6 +16,7 @@
             inputsFrom = [ sqlite.devShells.${system}.default ];
             shellHook = ''
 
+              export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.zlib ]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
               export PIP_PREFIX=$PWD/.pip
               export PATH="$PIP_PREFIX/bin:$PATH"
               py=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')

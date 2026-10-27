@@ -3,6 +3,7 @@
 //! The length limit does not apply to every chunk. Markdown headings, HTML
 //! headings, and HTML comments stay whole (REQ-50, REQ-79).
 
+use crate::chunk::is_split_whitespace;
 use crate::html::{self, Piece};
 use crate::{CHUNK_LIMIT, Chunk, OVERLAP, chunk_docling, chunk_markdown, chunk_plain};
 
@@ -205,7 +206,11 @@ fn check_starts_increase(chunks: &[Chunk]) -> Result<(), String> {
     Ok(())
 }
 
-/// Adjacent pieces of one unit overlap by [`OVERLAP`], and the earlier piece is one full limit.
+/// Overlapping pieces of one unit share at least [`OVERLAP`] scalars.
+/// The next piece starts on a word boundary only when this piece ends on one.
+/// When the next piece does not start on a word boundary, the overlap is exactly
+/// [`OVERLAP`]: either the cut fell inside a word, or the piece ended on a boundary
+/// but none lies at least [`OVERLAP`] scalars before that end.
 fn check_overlap(chunks: &[Chunk]) -> Result<(), String> {
     for pair in chunks.windows(2) {
         let (a, b) = (&pair[0], &pair[1]);
@@ -215,11 +220,27 @@ fn check_overlap(chunks: &[Chunk]) -> Result<(), String> {
         if b.start >= a.end || a.start >= b.end || b.start <= a.start {
             continue;
         }
-        if a.end - b.start != OVERLAP {
-            return Err(format!("overlap is {} scalars", a.end - b.start));
+        let overlap = a.end - b.start;
+        if overlap < OVERLAP {
+            return Err(format!("overlap is {overlap} scalars"));
         }
-        if a.text.chars().count() != CHUNK_LIMIT {
-            return Err("overlapped piece is shorter than the length limit".to_string());
+        let cut_on_boundary = a.text.chars().next_back().is_some_and(is_split_whitespace);
+        let next_on_boundary = a
+            .text
+            .chars()
+            .nth(b.start - a.start - 1)
+            .is_some_and(is_split_whitespace);
+        if next_on_boundary && !cut_on_boundary {
+            return Err("overlap edge is not a word boundary".to_string());
+        }
+        if !next_on_boundary && overlap != OVERLAP {
+            return Err(format!("hard-cut overlap is {overlap} scalars"));
+        }
+        if !cut_on_boundary && a.text.chars().count() != CHUNK_LIMIT {
+            return Err(format!(
+                "hard-cut piece has {} scalars",
+                a.text.chars().count()
+            ));
         }
     }
     Ok(())

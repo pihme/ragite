@@ -89,6 +89,7 @@ updates:
       - /nix/mutants
       - /nix/fuzz
       - /nix/bench
+      - /nix/release
     schedule:
       interval: weekly
       day: saturday

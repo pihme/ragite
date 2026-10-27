@@ -177,7 +177,7 @@ jobs:
         run: bash .github/scripts/require-smudged-models.sh
 
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
-      - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
+      - run: bash .github/scripts/load-nix-env.sh ./nix/release
 
       - name: Build the release extension
         run: |
@@ -196,6 +196,23 @@ jobs:
           echo "$out"
           echo "$out" | grep -q 'potion-retrieval-32M@'
           echo "$out" | grep -qx 2048
+
+      # The published library is built with zig against glibc 2.34 stubs, so it
+      # loads on any distribution with glibc 2.34 or newer. Since #94 a plain
+      # cargo build in the Nix shell linked against Nix's glibc (2.44).
+      - name: Build the published library against glibc 2.34
+        run: |
+          env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
+            cargo zigbuild -p ragite-sqlite --release --target x86_64-unknown-linux-gnu.2.34
+
+      - name: Published library stays on the glibc 2.34 baseline
+        run: bash .github/scripts/check-glibc-baseline.sh target/x86_64-unknown-linux-gnu/release/libragite.so 2.34
+
+      - name: Published library loads on Ubuntu 22.04
+        run: |
+          docker run --rm -v "$PWD/target/x86_64-unknown-linux-gnu/release/libragite.so:/x/libragite.so:ro" \
+            -v "$PWD/.github/scripts/smoke-load-extension.sh:/smoke.sh:ro" \
+            ubuntu:22.04@sha256:e0f80c829509ef4df9e76bd8944eb7b8ec25cbb379b112a7f9448b2c77a77c9b bash /smoke.sh /x/libragite.so
 
       - name: Test suite and parity against the release extension
         run: env -u RAGITE_MODEL_PATH cargo test --workspace --release
@@ -308,7 +325,7 @@ jobs:
         run: bash .github/scripts/require-smudged-models.sh
 
       - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31
-      - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
+      - run: bash .github/scripts/load-nix-env.sh ./nix/release
 
       - name: Cut the release
         id: release
@@ -330,9 +347,11 @@ jobs:
             exit 0
           fi
           env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
-            cargo build -p ragite-sqlite --release
+            cargo zigbuild -p ragite-sqlite --release --target x86_64-unknown-linux-gnu.2.34
+          so=target/x86_64-unknown-linux-gnu/release/libragite.so
+          bash .github/scripts/check-glibc-baseline.sh "$so" 2.34
           gh release upload "$tag" \
-            target/release/libragite.so \
+            "$so" \
             LICENSE-MIT \
             LICENSE-APACHE \
             THIRD_PARTY_NOTICES.md \

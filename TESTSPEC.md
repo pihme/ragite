@@ -2,7 +2,7 @@
 
 Status: version 1. The cases in this file are implemented and run in CI. Cases carry stable IDs (`TC-n`). Tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-283.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-284.
 
 ## Conventions
 
@@ -437,7 +437,7 @@ Unless a case says otherwise:
 ## REQ-70
 
 - **TC-200** Once `N` and `L` are recorded, a unit with no whitespace in the window still ends the first piece at `L` scalars and starts the next piece `N` scalars earlier. Both Chunk texts contain that run. The first piece has no copied prefix. The copied run does not include scalars from outside that paragraph, block, or item.
-- **TC-284** A paragraph of words whose scalar cut would fall inside a word ends each piece on U+0009, U+000A, U+000D, or U+0020 when REQ-70 finds that boundary. Each piece holds at most `L` scalars. The next piece starts on such a boundary, and the copied run is at least `N` scalars. A token longer than `L`, with a short word and then no whitespace, ends at `L` and copies exactly `N`. The same split covers a Markdown paragraph, a fenced block, an indented block, an HTML paragraph, and a Docling item.
+- **TC-284** A paragraph of words whose scalar cut would fall inside a word ends each piece on U+0009, U+000A, U+000D, or U+0020 when REQ-70 finds that boundary. Each piece holds at most `L` scalars. The next piece starts on such a boundary, and the copied run is at least `N` scalars. A token longer than `L` with no whitespace inside the window ends at `L` and copies exactly `N`. A short word before that token copies nothing. The same split covers a Markdown paragraph, a fenced block, an indented block, an HTML paragraph, and a Docling item.
 
 ## REQ-71
 

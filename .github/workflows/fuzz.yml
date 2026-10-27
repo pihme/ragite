@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           lfs: false
 
@@ -37,17 +37,20 @@ jobs:
       - run: bash .github/scripts/load-nix-env.sh ./nix/fuzz
 
       - name: Fuzz
+        env:
+          DURATION: ${{ inputs.duration }}
+          TARGET: ${{ inputs.target }}
         run: |
           set -euo pipefail
-          duration="${{ inputs.duration }}"
+          duration="$DURATION"
           if [ "$duration" -lt 1 ]; then
             echo "duration must be at least 1 second"
             exit 1
           fi
-          if [ "${{ inputs.target }}" = all ]; then
+          if [ "$TARGET" = all ]; then
             targets="html markdown docling"
           else
-            targets="${{ inputs.target }}"
+            targets="$TARGET"
           fi
           for target in $targets; do
             cargo fuzz run "$target" -- -max_total_time="$duration" -rss_limit_mb=2048 -timeout=10
@@ -55,7 +58,7 @@ jobs:
 
       - name: Upload crashes and corpus
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: fuzz-${{ github.run_id }}
           if-no-files-found: ignore

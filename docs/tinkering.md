@@ -82,7 +82,7 @@ pub(crate) fn cut(text: &str) -> Vec<Chunk> {
     let mut path: Vec<String> = Vec::new();
     for (unit_start, unit_end) in units(&chars, &mut path) {
         // split_range applies CHUNK_LIMIT and OVERLAP and keeps the overlap inside the unit.
-        for (start, end) in split_range(unit_start, unit_end) {
+        for (start, end) in split_range(&chars, unit_start, unit_end) {
             out.push(Chunk {
                 text: chars[start..end].iter().collect(),
                 start,
@@ -101,7 +101,7 @@ pub(crate) fn cut(text: &str) -> Vec<Chunk> {
 Rules every chunker on `main` follows. A new one should follow them too, or the spec has to say otherwise:
 
 - **Offsets are Unicode scalars**, the same units as a Rust `char` (REQ-31). For a text format, `text` is the exact slice `chars[start..end]`, and `invariants.rs` (`check_exact_slice`) relies on that. HTML is the documented exception: `start`/`end` cover the source span and `text` is the visible text. Docling counts inside each item's own string.
-- **Length and overlap come from `split_range`.** It cuts a unit longer than `CHUNK_LIMIT` into pieces of `CHUNK_LIMIT` scalars, and each next piece starts `OVERLAP` scalars before the previous one ends (REQ-70, REQ-95). Call it on one unit at a time, so the overlap never crosses a unit boundary. A unit the spec keeps whole, such as a heading, is pushed without `split_range`, as `push_whole` in `markdown.rs` does.
+- **Length and overlap come from `split_range`.** It ends a piece on a word boundary inside `CHUNK_LIMIT` when the unit has a space, tab, or newline there (REQ-70, REQ-95). The next piece starts on the latest word boundary at least `OVERLAP` scalars earlier, so the copied run can be longer than `OVERLAP`. When no boundary lies that far back, the next piece starts exactly `OVERLAP` scalars earlier. A piece shorter than `OVERLAP` is not copied. A unit with no whitespace in the window is still cut at `CHUNK_LIMIT`. Call it on one unit at a time, so the overlap never crosses a unit boundary. A unit the spec keeps whole, such as a heading, is pushed without `split_range`, as `push_whole` in `markdown.rs` does.
 - **No empty Chunks.** A unit with no characters produces nothing (REQ-36, REQ-48). A whitespace-only unit is still text where the spec says so.
 - **Emission order is the Chunk id order** (REQ-52). `insert_chunk` writes Chunks in the order the `Vec` holds them. If you collect out of order, sort before returning, as `html::cut_pieces` sorts by `start`.
 - **The heading path holds titles only** (REQ-56): no `#` marks and no tags, outermost first. `ragite-sqlite` serialises it with `heading_path_json`.

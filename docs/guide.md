@@ -91,7 +91,7 @@ SELECT chunk, heading_path, meta_json FROM docs_chunks WHERE source = 'contract.
 
 Chunking is fixed for a build; there are no chunking parameters to pass. To change it in the code, see [tinkering.md](tinkering.md). In version 1:
 
-- A chunk holds at most **512 Unicode characters**. A longer paragraph is split, and each next piece repeats the last **64 characters** of the previous one.
+- A chunk holds at most **512 Unicode characters**. A longer paragraph is split after a space, tab, or newline when one falls inside that limit. The next piece starts on such a boundary at least **64 characters** earlier, or further back when that is what lands on a boundary. A stretch with no whitespace is still cut at 512, and the next piece then repeats the last 64 characters. A piece shorter than 64 characters is not repeated.
 - `text/plain`: one chunk per paragraph (paragraphs are separated by a blank line).
 - `text/markdown`: each heading line is its own chunk; the text under it is cut at blank lines. A fenced or indented code block stays one paragraph. `heading_path` lists the headings above a chunk.
 - `text/html`: each `h1`–`h6` is a chunk; `p`, `li`, `pre`, `blockquote`, `td`, `th`, and `textarea` are paragraphs. `script` and `style` are dropped; whitespace is collapsed outside `pre`.

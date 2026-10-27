@@ -271,7 +271,8 @@ fn emit_split(out: &mut Vec<Piece>, atoms: &[Atom], path: &[String]) {
     if atoms.is_empty() {
         return;
     }
-    for (from, to) in split_range(0, atoms.len()) {
+    let chars: Vec<char> = atoms.iter().map(|atom| atom.ch).collect();
+    for (from, to) in split_range(&chars, 0, chars.len()) {
         let text: String = atoms[from..to].iter().map(|atom| atom.ch).collect();
         push(out, text, atoms[from].start, atoms[to - 1].end, path, false);
     }
@@ -505,16 +506,16 @@ fn character_reference(chars: &[char], start: usize, end: usize) -> Option<(Stri
 fn is_legacy_name(name: &str) -> bool {
     const LEGACY: &[&str] = &[
         "AElig", "AMP", "Aacute", "Acirc", "Agrave", "Aring", "Atilde", "Auml", "COPY", "Ccedil",
-        "ETH", "Eacute", "Ecirc", "Egrave", "Euml", "GT", "Iacute", "Icirc", "Igrave", "Iuml", "LT",
-        "Ntilde", "Oacute", "Ocirc", "Ograve", "Oslash", "Otilde", "Ouml", "QUOT", "REG", "THORN",
-        "Uacute", "Ucirc", "Ugrave", "Uuml", "Yacute", "aacute", "acirc", "acute", "aelig", "agrave",
-        "amp", "aring", "atilde", "auml", "brvbar", "ccedil", "cedil", "cent", "copy", "curren",
-        "deg", "divide", "eacute", "ecirc", "egrave", "eth", "euml", "frac12", "frac14", "frac34",
-        "gt", "iacute", "icirc", "iexcl", "igrave", "iquest", "iuml", "laquo", "lt", "macr",
-        "micro", "middot", "nbsp", "not", "ntilde", "oacute", "ocirc", "ograve", "ordf", "ordm",
-        "oslash", "otilde", "ouml", "para", "plusmn", "pound", "quot", "raquo", "reg", "sect",
-        "shy", "sup1", "sup2", "sup3", "szlig", "thorn", "times", "uacute", "ucirc", "ugrave",
-        "uml", "uuml", "yacute", "yen", "yuml",
+        "ETH", "Eacute", "Ecirc", "Egrave", "Euml", "GT", "Iacute", "Icirc", "Igrave", "Iuml",
+        "LT", "Ntilde", "Oacute", "Ocirc", "Ograve", "Oslash", "Otilde", "Ouml", "QUOT", "REG",
+        "THORN", "Uacute", "Ucirc", "Ugrave", "Uuml", "Yacute", "aacute", "acirc", "acute",
+        "aelig", "agrave", "amp", "aring", "atilde", "auml", "brvbar", "ccedil", "cedil", "cent",
+        "copy", "curren", "deg", "divide", "eacute", "ecirc", "egrave", "eth", "euml", "frac12",
+        "frac14", "frac34", "gt", "iacute", "icirc", "iexcl", "igrave", "iquest", "iuml", "laquo",
+        "lt", "macr", "micro", "middot", "nbsp", "not", "ntilde", "oacute", "ocirc", "ograve",
+        "ordf", "ordm", "oslash", "otilde", "ouml", "para", "plusmn", "pound", "quot", "raquo",
+        "reg", "sect", "shy", "sup1", "sup2", "sup3", "szlig", "thorn", "times", "uacute", "ucirc",
+        "ugrave", "uml", "uuml", "yacute", "yen", "yuml",
     ];
     LEGACY.binary_search(&name).is_ok()
 }
@@ -930,7 +931,8 @@ mod tests {
 
     #[test]
     fn tc_255_tc_262_deeper_headings_and_path_after_a_container() {
-        let chunks = chunk_html("<h1>A</h1><h2>B</h2><h3>C</h3><h4>D</h4><h5>E</h5><h6>F</h6><p>G</p>");
+        let chunks =
+            chunk_html("<h1>A</h1><h2>B</h2><h3>C</h3><h4>D</h4><h5>E</h5><h6>F</h6><p>G</p>");
         assert_eq!(texts(&chunks), vec!["A", "B", "C", "D", "E", "F", "G"]);
         assert_eq!(
             paths(&chunks),
@@ -965,16 +967,16 @@ mod tests {
 
         let after = chunk_html("<div><h1>T</h1></div> after");
         assert_eq!(texts(&after), vec!["T", "after"]);
-        assert_eq!(
-            paths(&after),
-            vec![vec![], vec!["T".to_string()]]
-        );
+        assert_eq!(paths(&after), vec![vec![], vec!["T".to_string()]]);
     }
 
     #[test]
     fn tc_265_doctype_does_not_swallow_the_following_paragraph() {
         assert_eq!(texts(&chunk_html("<!DOCTYPE html><p>Hi</p>")), vec!["Hi"]);
-        assert_eq!(texts(&chunk_html("<!DOCTYPE \"a>b\"><p>Hi</p>")), vec!["Hi"]);
+        assert_eq!(
+            texts(&chunk_html("<!DOCTYPE \"a>b\"><p>Hi</p>")),
+            vec!["Hi"]
+        );
     }
 
     #[test]
@@ -1051,15 +1053,15 @@ mod tests {
         );
         assert_eq!(texts(&chunk_html("<!-- &amp; -->")), vec![" &amp; "]);
         assert_eq!(texts(&chunk_html("<p>&#65 &#x42</p>")), vec!["A B"]);
-        assert_eq!(
-            texts(&chunk_html("<p>&#1114111;</p>")),
-            vec!["\u{10FFFF}"]
-        );
+        assert_eq!(texts(&chunk_html("<p>&#1114111;</p>")), vec!["\u{10FFFF}"]);
         assert_eq!(texts(&chunk_html("<p>&notin x</p>")), vec!["\u{ac}in x"]);
         assert_eq!(texts(&chunk_html("<p>&amp x</p>")), vec!["& x"]);
         assert_eq!(texts(&chunk_html("<p>&notit;</p>")), vec!["\u{ac}it;"]);
         assert_eq!(texts(&chunk_html("<p>&notin;</p>")), vec!["\u{2209}"]);
-        assert_eq!(texts(&chunk_html("<!-- &#65 &amp -->")), vec![" &#65 &amp "]);
+        assert_eq!(
+            texts(&chunk_html("<!-- &#65 &amp -->")),
+            vec![" &#65 &amp "]
+        );
         let disguised = chunk_html("<p>&lt;!-- not --&gt;</p>");
         assert_eq!(texts(&disguised), vec!["<!-- not -->"]);
         assert_eq!(disguised.len(), 1);

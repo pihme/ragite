@@ -140,11 +140,12 @@ SELECT (SELECT count(*) FROM docs WHERE source = 'draft.txt') AS drafts,
 
 ### Hybrid search with MATCH
 
-`MATCH` runs RAGite's search: it embeds the query, takes the 50 nearest chunks by cosine similarity and the 50 best full-text (BM25) chunks, and fuses the two rankings with Reciprocal Rank Fusion (k = 60, equal weights). The `score` column is that fused score; higher is better, and rows come back best first.
+`MATCH` runs RAGite's search: it embeds the query, takes up to 50 nearest chunks by cosine distance and the 50 best full-text (BM25) chunks, and fuses the two rankings with Reciprocal Rank Fusion (k = 60, equal weights). A vector neighbor farther than cosine distance 0.8879346251487732 is left out before that fusion. The chunks that remain are ranked again from the closest, so the closest one that stayed is still rank 1. The full-text list is not shortened by that distance. The `score` column is that fused score; higher is better, and rows come back best first.
 
 - On `<name>_chunks`, `MATCH` returns chunks.
 - On `<name>`, it returns each matching document once, scored by its best chunk.
-- Use `LIMIT` to take fewer rows. Without it you get every fused row (at most the candidate depth). `LIMIT` does not change scores. See [Narrowing a search](#narrowing-a-search).
+- Use `LIMIT` to take fewer rows. Without it you get every fused row. `LIMIT` does not change scores. See [Narrowing a search](#narrowing-a-search).
+- No rows means the full-text list was empty and none of the nearest chunks were within that distance. A full-text hit can still come back when its vector is farther than the distance.
 
 ```sql
 SELECT chunk, source, round(score, 4) AS score
@@ -155,9 +156,9 @@ FROM docs WHERE docs MATCH 'Does it need a GPU?' LIMIT 1;
 -- expect: "source":"https://example.com/faq"
 ```
 
-The score is a rank-fusion number, not a similarity: a chunk ranked first in one list gets `1/61` (about 0.0164) from that list, and a chunk in both lists adds both terms (at most `2/61`, about 0.0328). Compare scores within one query, not across queries, and do not use them as an absolute threshold.
+The score is a rank among the rows that remain, not a similarity and not the distance. `1/61` (about 0.0164) means best remaining row on one list, not "close enough." A chunk in both lists adds both terms (at most `2/61`, about 0.0328). Compare scores within one query, not across queries, and do not use them as an absolute threshold.
 
-k, the weights, and the candidate depth are fixed in the code. [tinkering.md](tinkering.md#4-influence-search-results-and-the-fusion) shows where they live and what SQL can still do on top of the fused rows.
+k, the weights, the candidate depth, and the distance are fixed in the code. You cannot set the distance. 0.8879346251487732 was measured for potion-retrieval-32M. Another collection can sit closer or farther than these distances. [tinkering.md](tinkering.md#4-influence-search-results-and-the-fusion) shows where they live and what SQL can still do on top of the fused rows.
 
 ### Narrowing a search
 
@@ -175,7 +176,7 @@ A join key on a column of this table is the same kind of constraint (REQ-102). `
 
 These do not select rows before the search. Each one only sees the fused candidates, so a real match outside the top 50 can be missing:
 
-- `score` is filled in by the fusion. `WHERE score > 0.02` can drop weak results. It cannot reach a chunk the top 50 never included (REQ-100).
+- `score` is filled in by the fusion. It is a rank, not a distance. `WHERE score > 0.02` compares that rank and can drop a one-list row (rank 1 on one list is about 0.0164). It cannot reach a chunk the rankings left out, whether that chunk was past the top 50 or farther than the fixed distance (REQ-100).
 - `LIMIT` and `OFFSET` take a window of the fused rows, and `ORDER BY` reorders them. They do not change who was ranked or what the scores are (REQ-101).
 - A condition that mentions **only the other table** never reaches RAGite. `JOIN pages ON pages.lang = 'en'` attaches your columns to chunks the search already returned. [Linking results](#4-linking-results-to-your-own-data) shows both kinds of join.
 - `LIKE`, `!=`, `<`, `>`, and `BETWEEN` do not name the rows to keep, so they also run only on the fused rows (REQ-103). `source = 'wikipedia'` finds a document outside the global top 50. `source LIKE 'wiki%'` does not. An `OR` of equalities, such as `source = 'a' OR source = 'b'`, is included when SQLite turns it into `IN` or runs one search per value.

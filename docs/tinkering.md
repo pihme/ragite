@@ -11,7 +11,7 @@ For using RAGite as it is, read the [user guide](guide.md) instead. Every name b
 
 ## Before you start: presets are fixed on purpose
 
-A RAGite build has no runtime switch for chunk size, overlap, fusion constant, weights, or candidate depth. The [README](../README.md#limitations) says so, and [SPEC.md](../SPEC.md) marks most of these choices *Do not reopen*. Every change in this guide is therefore a **code change plus a spec change**, never a setting.
+A RAGite build has no runtime switch for chunk size, overlap, fusion constant, weights, candidate depth, or the maximum cosine distance. The [README](../README.md#limitations) says so, and [SPEC.md](../SPEC.md) marks most of these choices *Do not reopen*. Every change in this guide is therefore a **code change plus a spec change**, never a setting.
 
 - In a fork, change the code and the requirements together.
 - Upstream, open an issue first ([CONTRIBUTING.md](../CONTRIBUTING.md#chunker-scoring-and-other-presets)). A proposal that comes with benchmark numbers (see [Measure the effect](#measure-the-effect)) is reviewed first. A new requirement takes the next free `REQ-n`, and a new test case takes the next free `TC-n`. Numbers are never reused.
@@ -24,7 +24,7 @@ A RAGite build has no runtime switch for chunk size, overlap, fusion constant, w
 | Markdown cutter `cut` | `crates/ragite-core/src/markdown.rs` |
 | HTML cutter `cut` / `cut_pieces`, its own small parser `Parser` | `crates/ragite-core/src/html.rs` (+ `html_entities.rs`) |
 | Docling cutter `chunk_docling` | `crates/ragite-core/src/docling.rs` |
-| Constants `CHUNK_LIMIT` (512), `OVERLAP` (64), `FUSION_DEPTH` (50) and the public re-exports | `crates/ragite-core/src/lib.rs` |
+| Constants `CHUNK_LIMIT` (512), `OVERLAP` (64), `FUSION_DEPTH` (50), `MAX_COSINE_DISTANCE` (section 8.1) and the public re-exports | `crates/ragite-core/src/lib.rs` |
 | Fusion: `reciprocal_rank_fusion`, `order_fused_chunks`, `best_document_scores`, private `RRF_K` (60) | `crates/ragite-core/src/fusion.rs` |
 | Model, prefixes, `Role`, `BuiltinModel::embed_blob` | `crates/ragite-core/src/model.rs` |
 | Chunk invariants used by the fuzz targets and TC-250 | `crates/ragite-core/src/invariants.rs` |
@@ -144,7 +144,7 @@ Things to know before you change anything:
 
 1. Returns no rows for an empty query, without running the Model (REQ-43).
 2. Embeds the query with `Role::Query`, so the query prefix is added (REQ-45).
-3. `vector_ids`: a sqlite-vec KNN on `<name>_vec` with `k = FUSION_DEPTH`, ordered by cosine distance.
+3. `vector_ids`: a sqlite-vec KNN on `<name>_vec` with `k = FUSION_DEPTH`, ordered by cosine distance. Neighbors farther than `MAX_COSINE_DISTANCE`, and neighbors whose distance is NULL, are dropped. The kept Chunks stay closest first.
 4. `fts_ids`: FTS5 on `<name>_fts` with the query wrapped as one phrase by `fts_phrase` (REQ-75), ordered by `bm25()`, `LIMIT FUSION_DEPTH`.
 5. `reciprocal_rank_fusion(&vector, &full_text)`: each list adds `1/(RRF_K + rank)` with rank starting at 1, and a Chunk on both lists sums its two terms.
 6. On `<name>_chunks`, `order_fused_chunks` sorts by Score, then `doc_id`, then Chunk id. On `<name>`, `best_document_scores` keeps each Document's **best** Chunk Score, not a sum.
@@ -161,16 +161,17 @@ None of these can be set from SQL or at `CREATE VIRTUAL TABLE`. Each one is a co
 | Document score | best Chunk (max) | `best_document_scores` | section 4.5 intro, REQ-80 |
 | Tie order | `doc_id`, then Chunk id | `order_fused_chunks`, `best_document_scores` | REQ-41 |
 | Vector metric | cosine | `distance_metric=cosine` in `create_shadows` | REQ-66 |
+| Maximum cosine distance | 0.8879346251487732 | `MAX_COSINE_DISTANCE` in `lib.rs`, applied in `vector_ids` after the KNN | REQ-66, section 8.1 |
 | FTS query | one plain phrase, no operators | `fts_phrase` | REQ-75 |
 | FTS tokenizer | `unicode61`, no stemming | `tokenize = 'unicode61'` in `create_shadows` | REQ-28 |
 | BM25 column weights | FTS5 defaults (one column) | `bm25({name})` in `fts_ids` | none |
 | Query/passage prefixes | empty for the built-in Model | `QUERY_PREFIX`/`PASSAGE_PREFIX` in `model.rs`; a provider build sets `RAGITE_QUERY_PREFIX`/`RAGITE_PASSAGE_PREFIX` | REQ-45, REQ-23 |
-| Score cutoff | none | there is no threshold anywhere | section 4.5 intro |
+| Score cutoff | none | a comparison on `score` is not a cutoff; the floor is the cosine distance above, applied before fusion | section 4.5 intro, REQ-66 |
 | Reranking | none | not implemented | section 3 |
 
 Points that tend to surprise people:
 
-- **There is no score cutoff, and the vector side always returns neighbours.** KNN returns the `FUSION_DEPTH` nearest Chunks whatever they contain, so a `MATCH` on a table with at least 50 Chunks returns 50 rows even for a query that matches no word. `tc_27_same_scores_and_fixed_depth` in `tests/search.rs` checks exactly that.
+- **Vector neighbors past a fixed distance are left out.** `vector_ids` asks sqlite-vec for the `FUSION_DEPTH` nearest Chunks, then drops a neighbor whose cosine distance is NULL or greater than `MAX_COSINE_DISTANCE` (section 8.1). The Chunks that stay are ranked from 1, closest first. The full-text list is not shortened, so a full-text hit can still be the only reason a row comes back. When both lists are empty, `MATCH` returns no rows. `score` is still a rank among the rows that remain. There is no score cutoff. TC-286 reads the distance from section 8.1. `tc_27_same_scores_and_fixed_depth` checks that two searches return the same Scores and that the caller has no `k` argument.
 - **`=` and `IN` select Chunks before the depth cut (REQ-99).** `search::plan` consumes those constraints with `MATCH` and records the columns in `idxStr`. `chunk_id_restriction` turns them into Chunk ids. `vector_ids` passes that set into the KNN as `rowid IN`, and `fts_ids` applies it before `LIMIT`. A `rowid` equality keeps the search plan. A join key on a RAGite column is one of those constraints, and the constrained plan costs less than `MATCH` alone so an inner join uses it (REQ-102). `score` (REQ-100), `LIMIT`, `OFFSET`, and `ORDER BY` (REQ-101), a predicate that names only another table (REQ-102), and `LIKE` and the inequalities (REQ-103) stay on the fused rows. The caller-facing account is in the user guide, section 3, "Narrowing a search". `tests/search.rs` checks this as TC-272 through TC-282.
 - **Changing `create_shadows` affects only new tables.** The tokenizer and the distance metric are fixed into each table when it is created. Existing databases keep what they were created with.
 - **Changing `RRF_K` changes every expected Score in the tests.** `fusion.rs` unit tests and `tests/search.rs` assert literal values such as `2.0 / 61.0`.
@@ -190,14 +191,15 @@ Everything SQL can do on top of the returned rows:
   LIMIT 5;
   ```
 
-  This re-orders only the at most 50 fused rows. It cannot bring back a Chunk that fell outside the depth. A `=` or `IN` on a RAGite column is applied earlier, so the 50 are chosen inside that set.
+  This re-orders only the fused rows. It cannot bring back a Chunk that fell outside the depth or past `MAX_COSINE_DISTANCE`. A `=` or `IN` on a RAGite column is applied earlier, so those candidates are chosen inside that set.
 - **Shape the input.** Splitting documents differently before `INSERT`, or choosing `text/markdown` over `text/plain` so headings become their own Chunks, changes what each Chunk contains, and so what each ranking sees.
 - **Use your own vectors next to RAGite.** `ragite_embed(table, text, role)` and `ragite_embed_model(id, text, role)` return the same vectors RAGite stores (REQ-17, REQ-69), so an application can keep its own vector table and combine it with `MATCH` results in SQL. RAGite's own shadow tables (`<name>_vec`, `<name>_fts`, `<name>_chunk_rows`) are internal: their shape is not a public interface, and writing to them breaks the consistency between them.
 
 ### Changing the fusion in code
 
 - **k or weights:** change `RRF_K` and `add_ranks` in `fusion.rs`. For weights, a natural shape is `reciprocal_rank_fusion(vector, full_text)` calling a weighted `add_ranks(scores, ids, weight)`. Keep the function free of SQLite. Update REQ-15, REQ-66, REQ-80, TC-26, TC-223, and TC-224, and the literal Scores in `fusion.rs` and `tests/search.rs`.
-- **Depth:** change `FUSION_DEPTH` in `lib.rs`. Update section 8.1 and the README *Status* paragraph. `tc_27_same_scores_and_fixed_depth` inserts 51 documents and expects 50 rows, so it has to follow the new value. TC-32 reads `D` from section 8.1.
+- **Depth:** change `FUSION_DEPTH` in `lib.rs`. Update section 8.1 and the README *Status* paragraph. TC-32 reads `D` from section 8.1.
+- **Distance:** change `MAX_COSINE_DISTANCE` in `lib.rs`. Update the section 8.1 vector-distance bullet, the README *Status* paragraph, and the user guide. TC-286 reads that bullet. The number is a measured cosine distance for potion-retrieval-32M.
 - **Document score** (for example a sum instead of the best Chunk): `best_document_scores`, plus the section 4.5 intro, REQ-80, TC-29, TC-224, and TC-256.
 - **Exposing a knob in SQL** (a hidden column, a `CREATE VIRTUAL TABLE` argument, or a `MATCH` syntax) contradicts TC-27, which requires that the caller has no argument for weights, k, or depth, and REQ-75, which accepts plain text only. That is a spec decision, not a refactor.
 

@@ -66,28 +66,22 @@ fn tc_28_tc_29_tc_30_tc_76_tc_110_tc_224_best_chunk_and_one_list() {
          SELECT doc_id, chunk, score FROM docs_chunks WHERE docs_chunks MATCH 'alpha unique';",
     );
     let docs = rows.as_array().unwrap();
+    // "unrelated zebra" is farther than the maximum and is not a full-text hit.
+    assert_eq!(docs.len(), 3);
     assert_eq!(cell(&rows, 0, "doc_id"), "2");
     assert_eq!(cell(&rows, 0, "source"), "manual");
     assert_score(score(&rows, 0), 2.0 / 61.0);
-    assert_eq!(cell(&rows, 1, "doc_id"), "1");
-    let other = score(&rows, 1);
-    assert!(
-        (other - 1.0 / 62.0).abs() < 1e-12 || (other - 1.0 / 63.0).abs() < 1e-12,
-        "vector-only document score {other}"
-    );
 
-    assert_eq!(cell(&rows, 2, "chunk"), "alpha unique");
-    assert_score(score(&rows, 2), 2.0 / 61.0);
+    assert_eq!(cell(&rows, 1, "chunk"), "alpha unique");
+    assert_score(score(&rows, 1), 2.0 / 61.0);
+    assert_eq!(cell(&rows, 1, "doc_id"), "2");
+    assert_eq!(cell(&rows, 2, "chunk"), "beta other");
     assert_eq!(cell(&rows, 2, "doc_id"), "2");
-    let mut rest = vec![score(&rows, 3), score(&rows, 4)];
-    rest.sort_by(|left, right| right.partial_cmp(left).unwrap());
-    assert_score(rest[0], 1.0 / 62.0);
-    assert_score(rest[1], 1.0 / 63.0);
-    assert_eq!(docs.len(), 5);
+    assert_score(score(&rows, 2), 1.0 / 62.0);
 }
 
 #[test]
-fn tc_67_tc_68_tc_193_fts_folding_and_cosine_rank() {
+fn tc_67_tc_68_fts_folding() {
     let rows = ok("CREATE VIRTUAL TABLE docs USING ragite;
          INSERT INTO docs(text) VALUES ('installation');
          SELECT score FROM docs_chunks WHERE docs_chunks MATCH 'install';
@@ -102,16 +96,13 @@ fn tc_67_tc_68_tc_193_fts_folding_and_cosine_rank() {
          INSERT INTO docs(text) VALUES ('café');
          SELECT doc_id, score FROM docs WHERE docs MATCH 'install';
          SELECT doc_id, score FROM docs WHERE docs MATCH 'cafe';");
+    // café is farther than the maximum from "install", and Install is farther than
+    // the maximum from "cafe". Each query keeps the full-text hit only.
+    assert_eq!(rows.as_array().unwrap().len(), 2);
     assert_eq!(cell(&rows, 0, "doc_id"), "1");
     assert_score(score(&rows, 0), 2.0 / 61.0);
     assert_eq!(cell(&rows, 1, "doc_id"), "2");
-    let cafe_neighbor = score(&rows, 1);
-    assert!(
-        (cafe_neighbor - 1.0 / 62.0).abs() < 1e-12,
-        "café query should rank Install second, got {cafe_neighbor}"
-    );
-    assert_eq!(cell(&rows, 2, "doc_id"), "2");
-    assert_score(score(&rows, 2), 2.0 / 61.0);
+    assert_score(score(&rows, 1), 2.0 / 61.0);
 }
 
 #[test]
@@ -134,8 +125,8 @@ fn tc_69_one_tokenizer_for_english_and_german() {
 #[test]
 fn tc_103_tc_104_limit_shortens_the_fused_list() {
     let rows = ok("CREATE VIRTUAL TABLE docs USING ragite;
-         INSERT INTO docs(text) VALUES ('zebra tail');
-         INSERT INTO docs(text) VALUES ('other thing');
+         INSERT INTO docs(text) VALUES ('target');
+         INSERT INTO docs(text) VALUES ('phrase');
          INSERT INTO docs(text) VALUES ('target phrase');
          SELECT doc_id, score FROM docs WHERE docs MATCH 'target phrase';
          SELECT doc_id, score FROM docs WHERE docs MATCH 'target phrase' LIMIT 2;
@@ -173,20 +164,310 @@ fn tc_27_same_scores_and_fixed_depth() {
         message.contains("k") || message.contains("no such column"),
         "{message}"
     );
+}
 
+/// `M` and `D` from SPEC section 8.1. This test does not hard-code a guessed distance.
+fn spec_section_81() -> &'static str {
+    let spec = include_str!("../../../SPEC.md");
+    let start = spec
+        .find("### 8.1 Version 1 constants")
+        .expect("SPEC section 8.1");
+    let rest = &spec[start..];
+    let end = rest.find("\n## ").unwrap_or(rest.len());
+    &rest[..end]
+}
+
+fn spec_leading_number(label: &str) -> f64 {
+    let section = spec_section_81();
+    let marker = format!("**{label}.** ");
+    let at = section
+        .find(&marker)
+        .unwrap_or_else(|| panic!("section 8.1 has no {label}"));
+    let token = section[at + marker.len()..]
+        .split_whitespace()
+        .next()
+        .unwrap_or_else(|| panic!("section 8.1 {label} has no number"));
+    token
+        .parse()
+        .unwrap_or_else(|_| panic!("section 8.1 {label} is not a number: {token}"))
+}
+
+fn sql_quote(text: &str) -> String {
+    format!("'{}'", text.replace('\'', "''"))
+}
+
+fn json_i64(row: &serde_json::Value, key: &str) -> i64 {
+    row[key]
+        .as_i64()
+        .unwrap_or_else(|| panic!("{key} in {row}"))
+}
+
+fn json_f64(row: &serde_json::Value, key: &str) -> f64 {
+    row[key]
+        .as_f64()
+        .unwrap_or_else(|| panic!("{key} in {row}"))
+}
+
+fn rrf(vector: &[i64], full_text: &[i64]) -> std::collections::HashMap<i64, f64> {
+    let mut scores = std::collections::HashMap::new();
+    for list in [vector, full_text] {
+        let mut seen = std::collections::HashSet::new();
+        for (index, id) in list.iter().enumerate() {
+            if !seen.insert(*id) {
+                continue;
+            }
+            *scores.entry(*id).or_insert(0.0) += 1.0 / (60.0 + index as f64 + 1.0);
+        }
+    }
+    scores
+}
+
+#[test]
+fn tc_193_tc_286_vector_neighbors_past_the_maximum_are_dropped() {
+    let max_distance = spec_leading_number("Vector distance");
+    let depth = spec_leading_number("Fusion depth") as usize;
+    assert_eq!(
+        max_distance.to_bits(),
+        ragite_core::MAX_COSINE_DISTANCE.to_bits()
+    );
+    assert_eq!(depth, ragite_core::FUSION_DEPTH);
+
+    let query = "purple quantum teapot";
+    let filler = format!("zzzzzzzz purple quantum teapot {}", "zebra ".repeat(40));
+    let zeros = "A".repeat(400);
+    let dots = ".".repeat(80);
+    let texts = [
+        query,
+        "a purple quantum teapot sits on the table",
+        "teapot purple",
+        "purple quantum kettle",
+        filler.as_str(),
+        "the mitochondria is the powerhouse of the cell",
+        "unrelated zebra quilt factory manual",
+        dots.as_str(),
+        zeros.as_str(),
+    ];
+    let quoted = sql_quote(query);
+    let phrase = sql_quote(&format!("\"{query}\""));
     let mut script = String::from("CREATE VIRTUAL TABLE docs USING ragite;\n");
-    for i in 1..=51 {
+    for text in texts {
         script.push_str(&format!(
-            "INSERT INTO docs(text) VALUES ('distinct chunk {i}');\n"
+            "INSERT INTO docs(text) VALUES ({});\n",
+            sql_quote(text)
         ));
     }
-    script.push_str(
-        "SELECT count(*) AS n FROM docs WHERE docs MATCH 'no-such-token';
-         SELECT count(*) AS n FROM docs_chunks WHERE docs_chunks MATCH 'no-such-token';",
-    );
+    script.push_str(&format!(
+        "SELECT 'dist' AS kind, c.rowid AS id, c.chunk AS chunk,
+                vec_distance_cosine(v.embedding, ragite_embed('docs', {quoted}, 'query')) AS distance
+         FROM docs_chunks c JOIN docs_vec v ON v.rowid = c.rowid;
+         SELECT 'fts' AS kind, rowid AS id FROM docs_fts
+         WHERE docs_fts MATCH {phrase} ORDER BY bm25(docs_fts);
+         SELECT 'hit' AS kind, rowid AS id, score FROM docs_chunks
+         WHERE docs_chunks MATCH {quoted};
+         SELECT 'again' AS kind, rowid AS id, score FROM docs_chunks
+         WHERE docs_chunks MATCH {quoted};"
+    ));
     let rows = ok(&script);
-    assert_eq!(cell(&rows, 0, "n"), "50");
-    assert_eq!(cell(&rows, 1, "n"), "50");
+    let all = rows.as_array().unwrap();
+    let of_kind = |name: &str| {
+        all.iter()
+            .filter(|row| row["kind"].as_str() == Some(name))
+            .collect::<Vec<_>>()
+    };
+
+    struct Stored {
+        id: i64,
+        chunk: String,
+        distance: Option<f64>,
+    }
+    let stored: Vec<Stored> = of_kind("dist")
+        .into_iter()
+        .map(|row| Stored {
+            id: json_i64(row, "id"),
+            chunk: row["chunk"].as_str().expect("chunk").to_string(),
+            distance: if row["distance"].is_null() {
+                None
+            } else {
+                Some(json_f64(row, "distance"))
+            },
+        })
+        .collect();
+    let fts: Vec<i64> = of_kind("fts")
+        .into_iter()
+        .map(|row| json_i64(row, "id"))
+        .collect();
+    let hits: Vec<(i64, f64)> = of_kind("hit")
+        .into_iter()
+        .map(|row| (json_i64(row, "id"), json_f64(row, "score")))
+        .collect();
+    let again: Vec<(i64, f64)> = of_kind("again")
+        .into_iter()
+        .map(|row| (json_i64(row, "id"), json_f64(row, "score")))
+        .collect();
+    assert_eq!(hits, again);
+
+    let mut kept: Vec<(i64, f64)> = stored
+        .iter()
+        .filter_map(|chunk| {
+            chunk
+                .distance
+                .filter(|distance| *distance <= max_distance)
+                .map(|distance| (chunk.id, distance))
+        })
+        .collect();
+    kept.sort_by(|left, right| {
+        left.1
+            .partial_cmp(&right.1)
+            .unwrap()
+            .then(left.0.cmp(&right.0))
+    });
+    let vector: Vec<i64> = kept.into_iter().take(depth).map(|(id, _)| id).collect();
+    let full_text: Vec<i64> = fts.iter().copied().take(depth).collect();
+    let expected = rrf(&vector, &full_text);
+    assert_eq!(hits.len(), expected.len(), "{hits:?} vs {expected:?}");
+    for (id, score) in &hits {
+        let want = expected[id];
+        assert!(
+            (score - want).abs() < 1e-9,
+            "chunk {id} score {score} != {want}"
+        );
+    }
+    assert!(
+        (expected[vector.first().expect("a neighbor within M")]
+            - hits
+                .iter()
+                .find(|(id, _)| *id == *vector.first().unwrap())
+                .unwrap()
+                .1)
+            .abs()
+            < 1e-9
+    );
+    assert!(expected[&vector[0]] + 1e-12 >= 1.0 / 61.0);
+
+    let fts_set: std::collections::HashSet<i64> = fts.iter().copied().collect();
+    let hit_set: std::collections::HashSet<i64> = hits.iter().map(|(id, _)| *id).collect();
+    let exact = stored.iter().find(|chunk| chunk.chunk == query).unwrap();
+    assert_eq!(exact.distance, Some(0.0));
+    assert!(hit_set.contains(&exact.id));
+    assert_eq!(vector.first().copied(), Some(exact.id));
+
+    for chunk in &stored {
+        let over = match chunk.distance {
+            Some(distance) => distance > max_distance,
+            None => true,
+        };
+        if hit_set.contains(&chunk.id) && !fts_set.contains(&chunk.id) {
+            let distance = chunk.distance.expect("vector-only hit");
+            assert!(distance <= max_distance, "{distance} > {max_distance}");
+        }
+        if over {
+            assert_eq!(
+                hit_set.contains(&chunk.id),
+                fts_set.contains(&chunk.id),
+                "chunk {} distance {:?}",
+                chunk.id,
+                chunk.distance
+            );
+        }
+    }
+    assert!(stored.iter().any(|chunk| {
+        chunk
+            .distance
+            .is_some_and(|distance| distance > max_distance)
+            && fts_set.contains(&chunk.id)
+            && hit_set.contains(&chunk.id)
+    }));
+    assert!(stored.iter().any(|chunk| {
+        chunk
+            .distance
+            .is_some_and(|distance| distance > max_distance)
+            && !fts_set.contains(&chunk.id)
+            && !hit_set.contains(&chunk.id)
+    }));
+    assert!(stored.iter().any(|chunk| {
+        chunk
+            .distance
+            .is_some_and(|distance| distance <= max_distance && distance > 0.0)
+            && !fts_set.contains(&chunk.id)
+            && hit_set.contains(&chunk.id)
+    }));
+
+    let zero = stored.iter().find(|chunk| chunk.chunk == zeros).unwrap();
+    assert!(zero.distance.is_none(), "{:?}", zero.distance);
+    assert!(!hit_set.contains(&zero.id));
+
+    let mut vector_only: Vec<(f64, f64)> = stored
+        .iter()
+        .filter(|chunk| hit_set.contains(&chunk.id) && !fts_set.contains(&chunk.id))
+        .map(|chunk| {
+            let score = hits.iter().find(|(id, _)| *id == chunk.id).unwrap().1;
+            (chunk.distance.unwrap(), score)
+        })
+        .collect();
+    vector_only.sort_by(|left, right| left.0.partial_cmp(&right.0).unwrap());
+    assert!(vector_only.len() >= 2, "{vector_only:?}");
+    for pair in vector_only.windows(2) {
+        assert!(
+            pair[0].1 + 1e-12 >= pair[1].1,
+            "closer {:?} should outrank {:?}",
+            pair[0],
+            pair[1]
+        );
+    }
+
+    let far_texts: Vec<&str> = stored
+        .iter()
+        .filter(|chunk| {
+            let over = match chunk.distance {
+                Some(distance) => distance > max_distance,
+                None => true,
+            };
+            over && !fts_set.contains(&chunk.id)
+        })
+        .map(|chunk| chunk.chunk.as_str())
+        .collect();
+    assert!(!far_texts.is_empty());
+    let mut far_script = String::from("CREATE VIRTUAL TABLE far USING ragite;\n");
+    for text in &far_texts {
+        far_script.push_str(&format!(
+            "INSERT INTO far(text) VALUES ({});\n",
+            sql_quote(text)
+        ));
+    }
+    far_script.push_str(&format!(
+        "SELECT 'dist' AS kind, c.rowid AS id,
+                vec_distance_cosine(v.embedding, ragite_embed('far', {quoted}, 'query')) AS distance
+         FROM far_chunks c JOIN far_vec v ON v.rowid = c.rowid;
+         SELECT 'fts' AS kind, count(*) AS n FROM far_fts WHERE far_fts MATCH {phrase};
+         SELECT 'hit' AS kind, count(*) AS n FROM far_chunks WHERE far_chunks MATCH {quoted};
+         SELECT 'doc' AS kind, count(*) AS n FROM far WHERE far MATCH {quoted};"
+    ));
+    let far_rows = ok(&far_script);
+    let far_all = far_rows.as_array().unwrap();
+    let far_kind = |name: &str| {
+        far_all
+            .iter()
+            .filter(|row| row["kind"].as_str() == Some(name))
+            .collect::<Vec<_>>()
+    };
+    assert!(!far_kind("dist").is_empty());
+    for row in far_kind("dist") {
+        if row["distance"].is_null() {
+            continue;
+        }
+        let distance = json_f64(row, "distance");
+        assert!(distance > max_distance, "{distance} <= {max_distance}");
+    }
+    assert_eq!(json_i64(far_kind("fts")[0], "n"), 0);
+    assert_eq!(json_i64(far_kind("hit")[0], "n"), 0);
+    assert_eq!(json_i64(far_kind("doc")[0], "n"), 0);
+
+    let message = err(&format!(
+        "CREATE VIRTUAL TABLE docs USING ragite;
+         INSERT INTO docs(text) VALUES ({quoted});
+         SELECT score FROM docs WHERE docs MATCH {quoted} AND distance = 0.1;"
+    ));
+    assert!(message.contains("no such column"), "{message}");
 }
 
 #[test]
@@ -222,11 +503,10 @@ fn tc_115_tc_116_empty_skips_the_model_and_whitespace_is_embedded() {
          INSERT INTO docs(text) VALUES ('hello world');
          SELECT count(*) AS n FROM docs WHERE docs MATCH '';
          SELECT count(*) AS n FROM docs_chunks WHERE docs_chunks MATCH '';
-         SELECT count(*) AS n, score FROM docs_chunks WHERE docs_chunks MATCH '   ';");
+         SELECT count(*) AS n FROM docs_chunks WHERE docs_chunks MATCH '   ';");
     assert_eq!(cell(&rows, 0, "n"), "0");
     assert_eq!(cell(&rows, 1, "n"), "0");
-    assert_eq!(cell(&rows, 2, "n"), "1");
-    assert_score(score(&rows, 2), 1.0 / 61.0);
+    assert_eq!(cell(&rows, 2, "n"), "0");
 
     let path = std::env::temp_dir().join(format!("ragite-search-model-{}.db", std::process::id()));
     let _ = std::fs::remove_file(&path);
@@ -296,9 +576,9 @@ fn tc_227_match_column_does_not_change_the_search() {
          INSERT INTO docs(text, source) VALUES ('unrelated zebra', 'drop');
          SELECT source FROM docs WHERE docs MATCH 'target phrase' AND source = 'keep';
          SELECT source FROM docs WHERE docs MATCH 'target phrase' AND source = 'drop';");
-    assert_eq!(filtered.as_array().unwrap().len(), 2);
+    // "unrelated zebra" is farther than the maximum and is not a full-text hit.
+    assert_eq!(filtered.as_array().unwrap().len(), 1);
     assert_eq!(cell(&filtered, 0, "source"), "keep");
-    assert_eq!(cell(&filtered, 1, "source"), "drop");
 }
 
 fn plan_text(script: &str) -> String {

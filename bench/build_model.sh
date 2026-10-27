@@ -9,10 +9,10 @@ dir=bench/.models/$name
 if [ ! -f "$dir/model.safetensors" ]; then
   mkdir -p "$dir"
   for f in config.json tokenizer.json model.safetensors; do
-    curl -fsSL -o "$dir/$f" "https://huggingface.co/$hf/resolve/main/$f"
+    curl -fsSL --proto =https --proto-redir =https -o "$dir/$f" "https://huggingface.co/$hf/resolve/main/$f"
   done
 fi
-rev=$(curl -fsSL "https://huggingface.co/api/models/$hf" | python3 -c 'import json,sys;print(json.load(sys.stdin)["sha"])')
+rev=$(curl -fsSL --proto =https --proto-redir =https "https://huggingface.co/api/models/$hf" | python3 -c 'import json,sys;print(json.load(sys.stdin)["sha"])')
 RAGITE_MODEL_PATH="$PWD/$dir" RAGITE_MODEL_NAME="$name" RAGITE_MODEL_REVISION="$rev" \
 RAGITE_QUERY_PREFIX="$qp" RAGITE_PASSAGE_PREFIX="$pp" \
   cargo build -q -p ragite-sqlite --release --no-default-features --target-dir "target/bench-$name" >&2

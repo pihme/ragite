@@ -16,6 +16,7 @@ import os
 import pathlib
 import tomllib
 import urllib.error
+import urllib.parse
 import urllib.request
 
 REPO = "embeddings-benchmark/results"
@@ -23,10 +24,23 @@ TASKS = ["SciFact", "NFCorpus", "FiQA2018"]
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
+HOSTS = {"api.github.com", "raw.githubusercontent.com"}
+
+
+def seg(s: str) -> str:
+    """One URL path segment; a name from the listing must not climb the path."""
+    if not s or s in (".", "..") or "/" in s or "\\" in s:
+        raise ValueError(f"unexpected path segment {s!r}")
+    return urllib.parse.quote(s, safe="")
+
+
 def get(url: str):
+    u = urllib.parse.urlsplit(url)
+    if u.scheme != "https" or u.hostname not in HOSTS:
+        raise ValueError(f"refusing to fetch {url}")
     req = urllib.request.Request(url, headers={"User-Agent": "ragite-bench"})
     token = os.environ.get("GITHUB_TOKEN")
-    if token and "api.github.com" in url:
+    if token and u.hostname == "api.github.com":
         req.add_header("Authorization", f"Bearer {token}")
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.load(r)
@@ -35,12 +49,12 @@ def get(url: str):
 def score(model_dir: str, task: str, sha: str):
     """Return (ndcg@10, recall@10, revision) for the newest revision that has the task."""
     try:
-        revs = [x["name"] for x in get(f"https://api.github.com/repos/{REPO}/contents/results/{model_dir}?ref={sha}") if x["type"] == "dir"]
+        revs = [x["name"] for x in get(f"https://api.github.com/repos/{REPO}/contents/results/{seg(model_dir)}?ref={seg(sha)}") if x["type"] == "dir"]
     except urllib.error.HTTPError:
         return None
     # Prefer real revisions over "external" (scores reported by the model author).
     for rev in sorted(revs, key=lambda r: r == "external"):
-        url = f"https://raw.githubusercontent.com/{REPO}/{sha}/results/{model_dir}/{rev}/{task}.json"
+        url = f"https://raw.githubusercontent.com/{REPO}/{sha}/results/{seg(model_dir)}/{seg(rev)}/{seg(task)}.json"
         try:
             data = get(url)
         except urllib.error.HTTPError:

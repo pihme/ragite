@@ -10,12 +10,12 @@ use libsqlite3_sys::{
     sqlite3_value_free, sqlite3_value_type,
 };
 use ragite_core::{
-    FUSION_DEPTH, FusedChunk, Role, best_document_scores, order_fused_chunks,
+    FUSION_DEPTH, FusedChunk, MAX_COSINE_DISTANCE, Role, best_document_scores, order_fused_chunks,
     reciprocal_rank_fusion,
 };
 
 use super::{
-    COL_CHUNK, COL_C_DOC, COL_C_SOURCE, COL_DOC_ID, COL_END, COL_FORMAT, COL_HASH, COL_META,
+    COL_C_DOC, COL_C_SOURCE, COL_CHUNK, COL_DOC_ID, COL_END, COL_FORMAT, COL_HASH, COL_META,
     COL_PATH, COL_SOURCE, COL_START, COL_TEXT, Row,
 };
 use crate::sql::{self, Stmt};
@@ -272,13 +272,24 @@ fn vector_ids(
     let stmt = Stmt::prepare(
         table.db,
         &format!(
-            "SELECT rowid FROM {vec_name} WHERE embedding MATCH ?1 AND k = ?2{restrict} ORDER BY distance"
+            "SELECT rowid, distance FROM {vec_name} WHERE embedding MATCH ?1 AND k = ?2{restrict} ORDER BY distance"
         ),
     )?;
     stmt.bind_blob(1, blob)?;
     stmt.bind_i64(2, depth)?;
     bind_eqs(&stmt, eqs)?;
-    read_ids(&stmt)
+    let mut ids = Vec::new();
+    while stmt.step()? {
+        // NULL (undefined cosine, such as a zero vector) and NaN are not <= the maximum.
+        let Some(distance) = stmt.column_double(1) else {
+            continue;
+        };
+        if !(distance <= MAX_COSINE_DISTANCE) {
+            continue;
+        }
+        ids.push(stmt.column_i64(0));
+    }
+    Ok(ids)
 }
 
 fn fts_ids(

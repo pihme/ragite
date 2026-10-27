@@ -433,6 +433,7 @@ fn tc_268_rollback_is_visible_to_match() {
          INSERT INTO docs(text, source) VALUES ('zebra stripes', 'b');
          ROLLBACK;
          SELECT 'insert' AS step, count(*) AS n FROM docs_chunks WHERE docs_chunks MATCH 'zebra stripes';
+         SELECT 'kept' AS step, chunk FROM docs_chunks WHERE docs_chunks MATCH 'hello world';
          SELECT 'insert_fts' AS step, count(*) AS n FROM docs_fts WHERE docs_fts MATCH '\"zebra stripes\"';
          BEGIN;
          UPDATE docs SET text = 'zebra stripes' WHERE doc_id = 1;
@@ -450,8 +451,11 @@ fn tc_268_rollback_is_visible_to_match() {
     let step = |name: &str| -> Vec<&serde_json::Value> {
         rows.iter().filter(|r| r["step"] == name).collect()
     };
-    // Only the committed Document is left to rank; the rolled-back one is gone.
-    assert_eq!(step("insert")[0]["n"], 1);
+    // The rolled-back Chunk is an exact match for this query, so a hit would mean
+    // it was still stored. "hello world" is farther than the maximum and is not
+    // a full-text hit, so the query returns no rows. The committed Chunk remains.
+    assert_eq!(step("insert")[0]["n"], 0);
+    assert_eq!(step("kept")[0]["chunk"], "hello world");
     assert_eq!(step("insert_fts")[0]["n"], 0);
     let update = step("update");
     assert_eq!(update.len(), 1);

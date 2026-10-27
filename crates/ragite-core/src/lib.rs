@@ -26,6 +26,12 @@ pub const CHUNK_LIMIT: usize = 512;
 /// Chunks taken from each ranking before fusion.
 pub const FUSION_DEPTH: usize = 50;
 
+/// Maximum cosine distance kept on the vector ranking.
+/// Same scale as sqlite-vec `vec_distance_cosine`: 0 is the same direction.
+/// A neighbor farther than this is left out. The caller does not pass it.
+/// Recorded in SPEC section 8.1 for potion-retrieval-32M.
+pub const MAX_COSINE_DISTANCE: f64 = 0.8879346251487732;
+
 #[cfg(feature = "builtin-model")]
 pub const MODEL_NAME: &str = "potion-retrieval-32M";
 

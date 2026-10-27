@@ -61,7 +61,7 @@ Where those presets live in the code, and how to add a document type, write or c
 
 Version 1.0 delivers the interface above. Releases follow Semantic Versioning: a breaking change to the SQL interface, or one that requires re-indexing, comes only with a new major version. The current release is on the [releases page](https://github.com/pihme/ragite/releases/latest). See [ROADMAP.md](ROADMAP.md) for what version 2.0 will deliver.
 
-The design lives in [SPEC.md](SPEC.md). Version 1 uses potion-retrieval-32M (512 dimensions; the release `libragite.so` is about 135 MB (129 MiB) because the weights are embedded), chunks of at most 512 Unicode scalars split on a word boundary with an overlap of 64, and takes 50 chunks from each ranking.
+The design lives in [SPEC.md](SPEC.md). Version 1 uses potion-retrieval-32M (512 dimensions; the release `libragite.so` is about 135 MB (129 MiB) because the weights are embedded), chunks of at most 512 Unicode scalars split on a word boundary with an overlap of 64, and takes the 50 best full-text chunks and up to 50 vector neighbors, then drops vector neighbors farther than cosine distance 0.8879346251487732.
 
 ## Benchmark
 

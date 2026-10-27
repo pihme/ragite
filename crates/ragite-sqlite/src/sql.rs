@@ -6,9 +6,10 @@ use std::ptr;
 use libsqlite3_sys::{
     SQLITE_DONE, SQLITE_NULL, SQLITE_OK, SQLITE_ROW, SQLITE_TRANSIENT, sqlite3, sqlite3_bind_blob,
     sqlite3_bind_int64, sqlite3_bind_null, sqlite3_bind_text, sqlite3_bind_value,
-    sqlite3_column_bytes, sqlite3_column_int64, sqlite3_column_text, sqlite3_column_type,
-    sqlite3_db_handle, sqlite3_errmsg, sqlite3_finalize, sqlite3_last_insert_rowid, sqlite3_malloc,
-    sqlite3_prepare_v2, sqlite3_set_last_insert_rowid, sqlite3_step, sqlite3_stmt, sqlite3_value,
+    sqlite3_column_bytes, sqlite3_column_double, sqlite3_column_int64, sqlite3_column_text,
+    sqlite3_column_type, sqlite3_db_handle, sqlite3_errmsg, sqlite3_finalize,
+    sqlite3_last_insert_rowid, sqlite3_malloc, sqlite3_prepare_v2, sqlite3_set_last_insert_rowid,
+    sqlite3_step, sqlite3_stmt, sqlite3_value,
 };
 
 pub fn alloc_text(msg: &str) -> *mut c_char {
@@ -117,6 +118,17 @@ impl Stmt {
 
     pub fn column_i64(&self, index: c_int) -> i64 {
         unsafe { sqlite3_column_int64(self.raw, index) }
+    }
+
+    /// Real column, or `None` when the value is NULL.
+    /// `sqlite3_column_double` returns 0.0 for NULL, which is not a distance.
+    pub fn column_double(&self, index: c_int) -> Option<f64> {
+        unsafe {
+            if sqlite3_column_type(self.raw, index) == SQLITE_NULL {
+                return None;
+            }
+            Some(sqlite3_column_double(self.raw, index))
+        }
     }
 
     pub fn column_text(&self, index: c_int) -> Option<String> {

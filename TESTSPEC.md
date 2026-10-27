@@ -2,7 +2,7 @@
 
 Status: version 1. The cases in this file are implemented and run in CI. Cases carry stable IDs (`TC-n`). Tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-285.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-286.
 
 ## Conventions
 
@@ -13,7 +13,7 @@ Unless a case says otherwise:
 - The database is a fresh SQLite database, the extension is loaded, and the table is `docs` with companion `docs_chunks`.
 - `start` is inclusive and `end` is exclusive, in Unicode scalar values (Rust `char` indexes). A one-scalar chunk at the beginning has `start` 0 and `end` 1. Where the spec says the chunk text is the exact slice, that text equals the scalars in that half-open range.
 - "Fails" means the SQL statement returns an error. A failed write leaves the stored rows unchanged, except that ids already allocated stay consumed ([REQ-84](SPEC.md)).
-- `L` is the version 1 chunk length limit in Unicode scalars, `N` is the overlap in scalars, and `D` is the number of Chunks taken from each ranking before fusion. All three come from SPEC section 8.1. Cases that name them read those recorded values. They do not hard-code a guess. Until section 8.1 records a value, that case is not runnable, and its ID stays reserved.
+- `L` is the version 1 chunk length limit in Unicode scalars, `N` is the overlap in scalars, `D` is the number of Chunks taken from each ranking before fusion, and `M` is the maximum cosine distance kept on the vector ranking. All four come from SPEC section 8.1. Cases that name them read those recorded values. They do not hard-code a guess. Until section 8.1 records a value, that case is not runnable, and its ID stays reserved.
 - The build's one Model is called the built-in Model below. Its human-readable name and `name@revision` come from `ragite_list_models()`, not from a literal in the test.
 
 ## REQ-1
@@ -261,7 +261,7 @@ Unless a case says otherwise:
 ## REQ-43
 
 - **TC-115** `MATCH ''` returns no rows and does not fail, including when the stored Model cannot be loaded.
-- **TC-116** `MATCH '   '` is embedded as those spaces. On a table that has Chunks and a loadable Model, it returns rows. On a table whose Model cannot be loaded, it fails.
+- **TC-116** `MATCH '   '` is embedded as those spaces. On a table whose Model cannot be loaded, it fails. On a table that has Chunks and a loadable Model, cosine distance from that query is undefined, so the vector list is empty. When no Chunk is a full-text hit, `MATCH` returns no rows and does not fail.
 - **TC-117** `MATCH ''` does not call the Model. A test double of the Model records no embed for that query.
 
 ## REQ-44
@@ -415,7 +415,8 @@ Unless a case says otherwise:
 ## REQ-66
 
 - **TC-192** `docs_vec` is a sqlite-vec `vec0` table with `distance_metric=cosine` and `embedding float[dimension]`.
-- **TC-193** The vector ranking order is cosine similarity order.
+- **TC-193** The vector ranking order is cosine distance order, closest first, among the Chunks that stay within `M`.
+- **TC-286** Once `M` is recorded, a test reads `M` from the vector-distance bullet in section 8.1. It does not hard-code a guess. For a `MATCH`: every returned Chunk that is not a full-text hit has cosine distance less than or equal to `M`. A Chunk with distance greater than `M` is returned only when it is a full-text hit. When every Chunk is farther than `M` and the full-text list is empty, `MATCH` returns no rows and does not fail. A Chunk whose text is the query is a vector hit. Its distance is 0 for this model. The caller has no argument that sets the distance. Two searches of the same table and query still return the same Scores when the stored Chunks are unchanged.
 
 ## REQ-67
 
@@ -466,7 +467,7 @@ Unless a case says otherwise:
 - **TC-210** `MATCH 'cats AND dogs'` finds a Chunk whose text is `cats AND dogs` and does not find a Chunk whose text is `cats dogs`, because the token `and` is absent.
 - **TC-211** `MATCH 'NOT cats'` finds a Chunk `not cats` and does not find a Chunk whose text is only `cats`. `MATCH 'install*'` does not find `installation`.
 - **TC-212** `MATCH 'say "hello" there'` does not fail. The full-text tokens are `say`, `hello`, and `there`. The vector side embeds the same characters, plus the query prefix.
-- **TC-285** `MATCH 'dogs AND cats'` and `MATCH 'cats dogs'` both find a Chunk `cats AND dogs`. `MATCH 'cats dogs birds'` does not. `MATCH '***'` and `MATCH '"'` do not fail, match nothing on the full-text side, and still produce a vector Score.
+- **TC-285** `MATCH 'dogs AND cats'` and `MATCH 'cats dogs'` both find a Chunk `cats AND dogs`. `MATCH 'cats dogs birds'` is not a full-text hit. That Chunk still returns from the vector side when its distance is within the maximum. `MATCH '***'` and `MATCH '"'` do not fail and match nothing on the full-text side. For this Chunk those two queries are farther than the maximum, so they return no rows.
 
 ## REQ-76
 

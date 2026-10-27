@@ -347,14 +347,14 @@ fn tc_59_tc_60_tc_115_tc_116_tc_129_tc_195_unloaded_model() {
     let rows = parse_json(&out.stdout);
     assert_eq!(
         cell(&rows, 0, "n"),
-        "1",
-        "whitespace MATCH should return the stored row\n{}\n{}",
+        "0",
+        "whitespace MATCH has no full-text hit and no defined distance\n{}\n{}",
         out.stderr,
         out.stdout
     );
     assert_eq!(cell(&rows, 1, "n"), "0", "{}", out.stdout);
     assert_eq!(cell(&rows, 2, "n"), "0", "empty companion MATCH\n{}", out.stdout);
-    assert_eq!(cell(&rows, 3, "n"), "1", "whitespace companion MATCH\n{}", out.stdout);
+    assert_eq!(cell(&rows, 3, "n"), "0", "whitespace companion MATCH\n{}", out.stdout);
     assert_eq!(cell(&rows, 4, "text"), "hello");
     assert_eq!(cell(&rows, 4, "source"), "manual");
     assert_eq!(cell(&rows, 4, "format"), "text/plain");

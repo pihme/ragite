@@ -182,7 +182,7 @@ These do not select rows before the search. Each one only sees the fused candida
 
 ### What the full-text side matches
 
-The query text is searched in the full-text index **as one exact phrase** (REQ-75). FTS5 operators (`AND`, `OR`, `NOT`, `*`, quotes) are plain text, and there is no stemming (`install` does not match `installation`). A natural-language question rarely appears word for word in a document, so for such queries the result is effectively the vector ranking; the full-text side helps when the query quotes the document, such as an error message, a name, or a code identifier:
+The query text is plain text (REQ-75). RAGite splits it the way the full-text index does: a token is a run of letters and numbers, and every other character is a separator. A chunk is a full-text hit only when it contains every token. The tokens may sit in any order, and other words in the chunk do not matter. `AND`, `OR`, `NOT`, `*`, and quotes are not operators. A star does not search for a prefix, and there is no stemming, so `install` does not match `installation`. `How do I install it?` is a hit only when the chunk contains each of those words. A chunk that has only some of them is left to the vector ranking. `replace the binary` matches the sentence below, including when those words appear in another order or with other words between them:
 
 ```sql
 SELECT chunk, round(score, 4) AS score

@@ -8,7 +8,7 @@ use libsqlite3_sys::{
     sqlite3_bind_int64, sqlite3_bind_null, sqlite3_bind_text, sqlite3_bind_value,
     sqlite3_column_bytes, sqlite3_column_int64, sqlite3_column_text, sqlite3_column_type,
     sqlite3_db_handle, sqlite3_errmsg, sqlite3_finalize, sqlite3_last_insert_rowid, sqlite3_malloc,
-    sqlite3_prepare_v2, sqlite3_step, sqlite3_stmt, sqlite3_value,
+    sqlite3_prepare_v2, sqlite3_set_last_insert_rowid, sqlite3_step, sqlite3_stmt, sqlite3_value,
 };
 
 pub fn alloc_text(msg: &str) -> *mut c_char {
@@ -151,6 +151,10 @@ pub fn exec(db: *mut sqlite3, sql: &str) -> Result<(), String> {
 
 pub fn last_insert_rowid(db: *mut sqlite3) -> i64 {
     unsafe { sqlite3_last_insert_rowid(db) }
+}
+
+pub fn set_last_insert_rowid(db: *mut sqlite3, rowid: i64) {
+    unsafe { sqlite3_set_last_insert_rowid(db, rowid) };
 }
 
 pub fn exists(db: *mut sqlite3, schema: &str, name: &str) -> Result<bool, String> {

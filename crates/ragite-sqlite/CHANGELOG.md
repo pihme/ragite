@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0](https://github.com/pihme/ragite/compare/ragite/v1.0.1...ragite/v1.1.0) - 2026-10-27
+
+### Added
+
+- drop vector neighbors beyond a fixed cosine distance ([#116](https://github.com/pihme/ragite/pull/116))
+- search each MATCH token instead of one exact phrase ([#113](https://github.com/pihme/ragite/pull/113))
+- split a long unit on a word boundary ([#112](https://github.com/pihme/ragite/pull/112))
+
 ## [1.0.1](https://github.com/pihme/ragite/compare/ragite/v1.0.0...ragite/v1.0.1) - 2026-10-19
 
 ### Fixed

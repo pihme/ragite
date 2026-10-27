@@ -74,6 +74,10 @@ unsafe fn init(
         set_pz(pz_err, &err);
         return SQLITE_ERROR;
     }
+    if let Err(err) = vtab::ensure_tokenizer(db) {
+        set_pz(pz_err, &err);
+        return SQLITE_ERROR;
+    }
     SQLITE_OK
 }
 

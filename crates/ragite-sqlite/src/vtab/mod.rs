@@ -56,6 +56,10 @@ static ALLOW_DROP: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::ne
 static ALLOW_CREATE: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 
+pub(crate) fn ensure_tokenizer(db: *mut sqlite3) -> Result<(), String> {
+    search::ensure_tokenizer(db)
+}
+
 pub fn module() -> &'static sqlite3_module {
     static MODULE: OnceLock<sqlite3_module> = OnceLock::new();
     MODULE.get_or_init(|| {

@@ -58,16 +58,16 @@ Costs only mean something on a quiet machine, one Model at a time. Large Models 
 
 In the table, quality is the mean hybrid nDCG@10 over all datasets; the vector column shows what the embedding alone contributes (hybrid minus vector is what full-text search adds). A Model is on the **Pareto front** when no other Model is at least as good in quality and at least as cheap in chunks/s and binary size, and strictly better in one. Off-front Models are dominated; pick the smallest front Model whose quality is close to the best.
 
-## Why hybrid is close to vector-only
+## Why those hybrid numbers are close to vector-only
 
-In the results, hybrid and vector-only nDCG@10 are nearly equal, and Recall@10 on SciFact is identical. That is expected, not a bug: per REQ-75/REQ-61 the FTS5 side searches the whole query as one exact phrase, and benchmark questions almost never occur verbatim in a document. Check on SciFact with potion-base-8M (300 queries, 23,246 Chunks, all in the FTS index):
+In the stored results, hybrid and vector-only nDCG@10 are nearly equal, and Recall@10 on SciFact is identical. Those runs searched the whole query as one exact phrase. That was REQ-75 before it was reopened on 2026-10-27. Benchmark questions almost never occur verbatim in a document, so the full-text side rarely hit. The check below is on SciFact with potion-base-8M (300 queries, 23,246 Chunks, all in the FTS index). It measured that phrase rule, not the current search. A `MATCH` now keeps a chunk only when every `unicode61` token of the query is present (REQ-75). These numbers are not that behavior, and they are not a measurement of the shipped model.
 
 | FTS query form | queries with FTS hits | FTS-only nDCG@10 | hybrid nDCG@10 / Recall@10 |
 | --- | --- | --- | --- |
-| exact phrase (RAGite, REQ-75) | 1 / 300 | 0.0033 | 0.5255 / 0.6638 |
+| exact phrase (historical REQ-75) | 1 / 300 | 0.0033 | 0.5255 / 0.6638 |
 | OR of terms (plain BM25, for comparison) | 300 / 300 | 0.6093 | 0.6200 / 0.7799 |
 
-The FTS leg helps only for queries that quote document text verbatim. Exact-phrase search is kept by design; the numbers measure the vector Model.
+Under the phrase rule, the full-text leg helped only for queries that quote document text verbatim. `MATCH` no longer searches that way. Do not read these rows as the AND-of-tokens behavior.
 
 ## Known gap
 

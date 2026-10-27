@@ -29,7 +29,7 @@ A RAGite build has no runtime switch for chunk size, overlap, fusion constant, w
 | Model, prefixes, `Role`, `BuiltinModel::embed_blob` | `crates/ragite-core/src/model.rs` |
 | Chunk invariants used by the fuzz targets and TC-250 | `crates/ragite-core/src/invariants.rs` |
 | Format check `canonical_format`, chunker dispatch `write_chunks` | `crates/ragite-sqlite/src/vtab/mod.rs` |
-| Search: `plan`, `rows`, `vector_ids`, `fts_ids`, `fts_phrase` | `crates/ragite-sqlite/src/vtab/search.rs` (`best_index` and `filter` in `vtab/mod.rs` only adapt the SQLite callbacks) |
+| Search: `plan`, `rows`, `vector_ids`, `fts_ids`, `unicode61_tokens` | `crates/ragite-sqlite/src/vtab/search.rs` (`best_index` and `filter` in `vtab/mod.rs` only adapt the SQLite callbacks) |
 | Shadow names, lockstep Chunk writes, FTS5 tokenizer, vector distance metric | `crates/ragite-sqlite/src/vtab/shadows.rs` |
 
 `ragite-core` must not link SQLite (REQ-1). Chunking and fusion logic goes there, and `ragite-sqlite` only calls it.
@@ -145,7 +145,7 @@ Things to know before you change anything:
 1. Returns no rows for an empty query, without running the Model (REQ-43).
 2. Embeds the query with `Role::Query`, so the query prefix is added (REQ-45).
 3. `vector_ids`: a sqlite-vec KNN on `<name>_vec` with `k = FUSION_DEPTH`, ordered by cosine distance.
-4. `fts_ids`: FTS5 on `<name>_fts` with the query wrapped as one phrase by `fts_phrase` (REQ-75), ordered by `bm25()`, `LIMIT FUSION_DEPTH`.
+4. `fts_ids`: `unicode61_tokens` inserts the query into `temp.ragite_tok` (created once per connection, `tokenize='unicode61'`) and reads the tokens from `temp.ragite_tok_v`, the `fts5vocab` table. `fts_and` quotes each token and joins them with `AND` (REQ-75). No tokens means no full-text rows and no error. FTS5 then runs that query on `<name>_fts`, ordered by `bm25()`, `LIMIT FUSION_DEPTH`. The inserted row is deleted before the function returns, and `last_insert_rowid` is restored. `changes()` reports that delete.
 5. `reciprocal_rank_fusion(&vector, &full_text)`: each list adds `1/(RRF_K + rank)` with rank starting at 1, and a Chunk on both lists sums its two terms.
 6. On `<name>_chunks`, `order_fused_chunks` sorts by Score, then `doc_id`, then Chunk id. On `<name>`, `best_document_scores` keeps each Document's **best** Chunk Score, not a sum.
 
@@ -161,7 +161,7 @@ None of these can be set from SQL or at `CREATE VIRTUAL TABLE`. Each one is a co
 | Document score | best Chunk (max) | `best_document_scores` | section 4.5 intro, REQ-80 |
 | Tie order | `doc_id`, then Chunk id | `order_fused_chunks`, `best_document_scores` | REQ-41 |
 | Vector metric | cosine | `distance_metric=cosine` in `create_shadows` | REQ-66 |
-| FTS query | one plain phrase, no operators | `fts_phrase` | REQ-75 |
+| FTS query | AND of quoted `unicode61` tokens, no operators | `fts_and` | REQ-75 |
 | FTS tokenizer | `unicode61`, no stemming | `tokenize = 'unicode61'` in `create_shadows` | REQ-28 |
 | BM25 column weights | FTS5 defaults (one column) | `bm25({name})` in `fts_ids` | none |
 | Query/passage prefixes | empty for the built-in Model | `QUERY_PREFIX`/`PASSAGE_PREFIX` in `model.rs`; a provider build sets `RAGITE_QUERY_PREFIX`/`RAGITE_PASSAGE_PREFIX` | REQ-45, REQ-23 |

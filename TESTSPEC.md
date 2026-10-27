@@ -2,7 +2,7 @@
 
 Status: version 1. The cases in this file are implemented and run in CI. Cases carry stable IDs (`TC-n`). Tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-283.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-283, and TC-285.
 
 ## Conventions
 
@@ -167,8 +167,8 @@ Unless a case says otherwise:
 ## REQ-28
 
 - **TC-66** `docs_fts` uses the FTS5 `unicode61` tokenizer and no stemmer.
-- **TC-67** A Chunk whose text is `installation` is not found by the FTS phrase `install`.
-- **TC-68** A Chunk whose text is `Install` is found by the FTS phrase `install`. A Chunk whose text is `café` is found by the FTS phrase `cafe`.
+- **TC-67** A Chunk whose text is `installation` is not found by the full-text query `install`.
+- **TC-68** A Chunk whose text is `Install` is found by the full-text query `install`. A Chunk whose text is `café` is found by the full-text query `cafe`.
 - **TC-69** An English Chunk and a German Chunk in the same table are indexed with that same tokenizer.
 
 ## REQ-29
@@ -462,9 +462,10 @@ Unless a case says otherwise:
 
 ## REQ-75
 
-- **TC-210** `MATCH 'cats AND dogs'` finds a Chunk whose text contains the phrase `cats AND dogs` and does not find a Chunk whose text is `cats dogs`.
+- **TC-210** `MATCH 'cats AND dogs'` finds a Chunk whose text is `cats AND dogs` and does not find a Chunk whose text is `cats dogs`, because the token `and` is absent.
 - **TC-211** `MATCH 'NOT cats'` finds a Chunk `not cats` and does not find a Chunk whose text is only `cats`. `MATCH 'install*'` does not find `installation`.
-- **TC-212** `MATCH 'say "hello" there'` does not fail. The quotation marks are escaped into one FTS phrase. The vector side embeds the same characters, plus the query prefix.
+- **TC-212** `MATCH 'say "hello" there'` does not fail. The full-text tokens are `say`, `hello`, and `there`. The vector side embeds the same characters, plus the query prefix.
+- **TC-285** `MATCH 'dogs AND cats'` and `MATCH 'cats dogs'` both find a Chunk `cats AND dogs`. `MATCH 'cats dogs birds'` does not. `MATCH '***'` and `MATCH '"'` do not fail, match nothing on the full-text side, and still produce a vector Score.
 
 ## REQ-76
 

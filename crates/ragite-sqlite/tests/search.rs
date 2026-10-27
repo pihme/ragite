@@ -190,7 +190,7 @@ fn tc_27_same_scores_and_fixed_depth() {
 }
 
 #[test]
-fn tc_210_tc_211_tc_212_match_text_is_one_phrase() {
+fn tc_210_tc_211_tc_212_match_text_is_not_fts_syntax() {
     let rows = ok("CREATE VIRTUAL TABLE docs USING ragite;
          INSERT INTO docs(text) VALUES ('cats AND dogs');
          INSERT INTO docs(text) VALUES ('cats dogs');
@@ -214,6 +214,34 @@ fn tc_210_tc_211_tc_212_match_text_is_one_phrase() {
          SELECT chunk, score FROM docs_chunks WHERE docs_chunks MATCH 'say \"hello\" there';");
     assert_eq!(cell(&rows, 0, "chunk"), "say \"hello\" there");
     assert_score(score(&rows, 0), 2.0 / 61.0);
+}
+
+#[test]
+fn tc_285_every_token_any_order() {
+    let rows = ok("CREATE VIRTUAL TABLE docs USING ragite;
+         INSERT INTO docs(text) VALUES ('cats AND dogs');
+         CREATE TABLE keeper(x INTEGER PRIMARY KEY);
+         INSERT INTO keeper(x) VALUES (7);
+         SELECT last_insert_rowid() AS id;
+         SELECT chunk, score FROM docs_chunks WHERE docs_chunks MATCH 'dogs AND cats';
+         SELECT chunk, score FROM docs_chunks WHERE docs_chunks MATCH 'cats dogs';
+         SELECT chunk, score FROM docs_chunks WHERE docs_chunks MATCH 'cats dogs birds';
+         SELECT chunk, score FROM docs_chunks WHERE docs_chunks MATCH '***';
+         SELECT chunk, score FROM docs_chunks WHERE docs_chunks MATCH '\"';
+         SELECT last_insert_rowid() AS id;");
+    assert_eq!(cell(&rows, 0, "id"), "7");
+    assert_eq!(cell(&rows, 1, "chunk"), "cats AND dogs");
+    assert_score(score(&rows, 1), 2.0 / 61.0);
+    assert_eq!(cell(&rows, 2, "chunk"), "cats AND dogs");
+    assert_score(score(&rows, 2), 2.0 / 61.0);
+    assert_eq!(cell(&rows, 3, "chunk"), "cats AND dogs");
+    assert_score(score(&rows, 3), 1.0 / 61.0);
+    assert_eq!(cell(&rows, 4, "chunk"), "cats AND dogs");
+    assert_score(score(&rows, 4), 1.0 / 61.0);
+    assert_eq!(cell(&rows, 5, "chunk"), "cats AND dogs");
+    assert_score(score(&rows, 5), 1.0 / 61.0);
+    assert_eq!(cell(&rows, 6, "id"), "7");
+    assert_eq!(rows.as_array().unwrap().len(), 7);
 }
 
 #[test]

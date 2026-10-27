@@ -15,7 +15,7 @@ pub fn chunk_plain(text: &str) -> Vec<Chunk> {
     let chars: Vec<char> = text.chars().collect();
     let mut out = Vec::new();
     for (start, end) in paragraph_ranges(&chars) {
-        for (piece_start, piece_end) in split_range(start, end) {
+        for (piece_start, piece_end) in split_range(&chars, start, end) {
             out.push(Chunk {
                 text: chars[piece_start..piece_end].iter().collect(),
                 start: piece_start,
@@ -106,23 +106,53 @@ fn paragraph_ranges(chars: &[char]) -> Vec<(usize, usize)> {
     ranges
 }
 
-pub(crate) fn split_range(start: usize, end: usize) -> Vec<(usize, usize)> {
+pub(crate) fn is_split_whitespace(ch: char) -> bool {
+    matches!(ch, '\t' | '\n' | '\r' | ' ')
+}
+
+/// Latest index in `(after, limit]` that follows a whitespace scalar.
+fn rightmost_boundary(chars: &[char], after: usize, limit: usize) -> Option<usize> {
+    let last = limit.min(chars.len());
+    let mut found = None;
+    let mut index = after + 1;
+    while index <= last {
+        if is_split_whitespace(chars[index - 1]) {
+            found = Some(index);
+        }
+        index += 1;
+    }
+    found
+}
+
+/// Split `[start, end)` on a word boundary inside the length limit.
+/// The next piece starts on a boundary at least `OVERLAP` scalars earlier when
+/// one is there, and exactly `OVERLAP` earlier when it is not. A piece shorter
+/// than `OVERLAP` is not copied onto the next piece.
+pub(crate) fn split_range(chars: &[char], start: usize, end: usize) -> Vec<(usize, usize)> {
     let mut pieces = Vec::new();
     if end <= start {
         return pieces;
     }
-    if end - start <= crate::CHUNK_LIMIT {
-        pieces.push((start, end));
-        return pieces;
-    }
+    let end = end.min(chars.len());
     let mut cursor = start;
     while cursor < end {
-        let piece_end = (cursor + crate::CHUNK_LIMIT).min(end);
+        let piece_end = if end - cursor <= crate::CHUNK_LIMIT {
+            end
+        } else {
+            let window = cursor + crate::CHUNK_LIMIT;
+            rightmost_boundary(chars, cursor, window).unwrap_or(window)
+        };
         pieces.push((cursor, piece_end));
         if piece_end == end {
             break;
         }
-        cursor = piece_end - crate::OVERLAP;
+        let overlap_at = piece_end.saturating_sub(crate::OVERLAP);
+        let next = if overlap_at <= cursor {
+            piece_end
+        } else {
+            rightmost_boundary(chars, cursor, overlap_at).unwrap_or(overlap_at)
+        };
+        cursor = if next <= cursor { piece_end } else { next };
     }
     pieces
 }

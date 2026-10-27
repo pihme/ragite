@@ -7,7 +7,7 @@ Each target feeds arbitrary bytes to a chunker, decoded as UTF-8 with invalid by
 - the call finishes without a panic
 - a plain-text chunk, a Markdown paragraph or code piece, an HTML paragraph or loose-text piece, and a Docling item piece each hold at most 512 Unicode scalars
 - a Markdown heading, an HTML heading, and an HTML comment may be longer, because the length limit does not split them
-- a split copies 64 scalars onto the next piece
+- overlapping pieces share at least 64 scalars; the next piece starts on a word boundary only when the previous piece ends on one, and a next piece that does not start on a word boundary overlaps by exactly 64 scalars
 - chunk text is valid UTF-8, and a chunk does not invent U+0000
 
 ## Run locally

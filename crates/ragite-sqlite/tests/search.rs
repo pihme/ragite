@@ -248,7 +248,15 @@ fn tc_193_tc_286_vector_neighbors_past_the_maximum_are_dropped() {
         zeros.as_str(),
     ];
     let quoted = sql_quote(query);
-    let phrase = sql_quote(&format!("\"{query}\""));
+    // The same AND of quoted tokens that `fts_and` binds. This ASCII query's
+    // unicode61 tokens are its words. A phrase would miss a different order.
+    let fts_query = sql_quote(
+        &query
+            .split_whitespace()
+            .map(|token| format!("\"{token}\""))
+            .collect::<Vec<_>>()
+            .join(" AND "),
+    );
     let mut script = String::from("CREATE VIRTUAL TABLE docs USING ragite;\n");
     for text in texts {
         script.push_str(&format!(
@@ -261,7 +269,7 @@ fn tc_193_tc_286_vector_neighbors_past_the_maximum_are_dropped() {
                 vec_distance_cosine(v.embedding, ragite_embed('docs', {quoted}, 'query')) AS distance
          FROM docs_chunks c JOIN docs_vec v ON v.rowid = c.rowid;
          SELECT 'fts' AS kind, rowid AS id FROM docs_fts
-         WHERE docs_fts MATCH {phrase} ORDER BY bm25(docs_fts);
+         WHERE docs_fts MATCH {fts_query} ORDER BY bm25(docs_fts);
          SELECT 'hit' AS kind, rowid AS id, score FROM docs_chunks
          WHERE docs_chunks MATCH {quoted};
          SELECT 'again' AS kind, rowid AS id, score FROM docs_chunks
@@ -438,7 +446,7 @@ fn tc_193_tc_286_vector_neighbors_past_the_maximum_are_dropped() {
         "SELECT 'dist' AS kind, c.rowid AS id,
                 vec_distance_cosine(v.embedding, ragite_embed('far', {quoted}, 'query')) AS distance
          FROM far_chunks c JOIN far_vec v ON v.rowid = c.rowid;
-         SELECT 'fts' AS kind, count(*) AS n FROM far_fts WHERE far_fts MATCH {phrase};
+         SELECT 'fts' AS kind, count(*) AS n FROM far_fts WHERE far_fts MATCH {fts_query};
          SELECT 'hit' AS kind, count(*) AS n FROM far_chunks WHERE far_chunks MATCH {quoted};
          SELECT 'doc' AS kind, count(*) AS n FROM far WHERE far MATCH {quoted};"
     ));
@@ -471,7 +479,7 @@ fn tc_193_tc_286_vector_neighbors_past_the_maximum_are_dropped() {
 }
 
 #[test]
-fn tc_210_tc_211_tc_212_match_text_is_one_phrase() {
+fn tc_210_tc_211_tc_212_match_text_is_not_fts_syntax() {
     let rows = ok("CREATE VIRTUAL TABLE docs USING ragite;
          INSERT INTO docs(text) VALUES ('cats AND dogs');
          INSERT INTO docs(text) VALUES ('cats dogs');
@@ -495,6 +503,32 @@ fn tc_210_tc_211_tc_212_match_text_is_one_phrase() {
          SELECT chunk, score FROM docs_chunks WHERE docs_chunks MATCH 'say \"hello\" there';");
     assert_eq!(cell(&rows, 0, "chunk"), "say \"hello\" there");
     assert_score(score(&rows, 0), 2.0 / 61.0);
+}
+
+#[test]
+fn tc_285_every_token_any_order() {
+    let rows = ok("CREATE VIRTUAL TABLE docs USING ragite;
+         INSERT INTO docs(text) VALUES ('cats AND dogs');
+         CREATE TABLE keeper(x INTEGER PRIMARY KEY);
+         INSERT INTO keeper(x) VALUES (7);
+         SELECT last_insert_rowid() AS id;
+         SELECT chunk, score FROM docs_chunks WHERE docs_chunks MATCH 'dogs AND cats';
+         SELECT chunk, score FROM docs_chunks WHERE docs_chunks MATCH 'cats dogs';
+         SELECT chunk, score FROM docs_chunks WHERE docs_chunks MATCH 'cats dogs birds';
+         SELECT count(*) AS n FROM docs_chunks WHERE docs_chunks MATCH '***';
+         SELECT count(*) AS n FROM docs_chunks WHERE docs_chunks MATCH '\"';
+         SELECT last_insert_rowid() AS id;");
+    assert_eq!(cell(&rows, 0, "id"), "7");
+    assert_eq!(cell(&rows, 1, "chunk"), "cats AND dogs");
+    assert_score(score(&rows, 1), 2.0 / 61.0);
+    assert_eq!(cell(&rows, 2, "chunk"), "cats AND dogs");
+    assert_score(score(&rows, 2), 2.0 / 61.0);
+    assert_eq!(cell(&rows, 3, "chunk"), "cats AND dogs");
+    assert_score(score(&rows, 3), 1.0 / 61.0);
+    assert_eq!(cell(&rows, 4, "n"), "0");
+    assert_eq!(cell(&rows, 5, "n"), "0");
+    assert_eq!(cell(&rows, 6, "id"), "7");
+    assert_eq!(rows.as_array().unwrap().len(), 7);
 }
 
 #[test]

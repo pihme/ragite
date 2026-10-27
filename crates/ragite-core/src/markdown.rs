@@ -73,7 +73,7 @@ fn push_whole(out: &mut Vec<Chunk>, chars: &[char], start: usize, end: usize, pa
 }
 
 fn push_split(out: &mut Vec<Chunk>, chars: &[char], start: usize, end: usize, path: Vec<String>) {
-    for (piece_start, piece_end) in split_range(start, end) {
+    for (piece_start, piece_end) in split_range(chars, start, end) {
         out.push(Chunk {
             text: chars[piece_start..piece_end].iter().collect(),
             start: piece_start,
@@ -308,7 +308,7 @@ fn push_paragraph(chars: &[char], start: usize, path: &[String], out: &mut Vec<C
 
 #[cfg(test)]
 mod tests {
-    use crate::{Chunk, chunk_markdown};
+    use crate::{CHUNK_LIMIT, Chunk, OVERLAP, chunk_markdown};
 
     fn assert_chunk(chunk: &Chunk, text: &str, start: usize, end: usize, path: &[&str]) {
         assert_eq!(chunk.text, text);
@@ -571,32 +571,41 @@ mod tests {
         let fence = format!("```\n{}\n```", "f".repeat(600));
         let text = format!("# F\n\n{fence}");
         let chunks = chunk_markdown(&text);
-        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks.len(), 4);
         assert_chunk(&chunks[0], "# F", 0, 3, &[]);
-        assert_eq!((chunks[1].start, chunks[1].end), (5, 517));
-        assert_eq!((chunks[2].start, chunks[2].end), (453, 613));
+        assert_eq!((chunks[1].start, chunks[1].end), (5, 9));
+        assert_eq!(chunks[1].text, "```\n");
+        assert_eq!((chunks[2].start, chunks[2].end), (9, 9 + CHUNK_LIMIT));
+        assert_eq!(
+            (chunks[3].start, chunks[3].end),
+            (9 + CHUNK_LIMIT - OVERLAP, 613)
+        );
+        assert!(chunks[2].text.chars().all(|c| c == 'f'));
+        assert!(chunks[3].text.ends_with("```"));
         assert_eq!(chunks[1].heading_path, vec!["F".to_string()]);
-        assert_eq!(chunks[2].heading_path, vec!["F".to_string()]);
-        assert!(chunks[1].text.starts_with("```"));
-        assert!(chunks[2].text.ends_with("```"));
+        assert_eq!(chunks[3].heading_path, vec!["F".to_string()]);
         assert!(!chunks[1].text.contains("# F"));
-        assert!(!chunks[2].text.contains("# F"));
+        assert!(!chunks[3].text.contains("# F"));
         assert!(chunks[1].meta_json.is_none());
-        assert!(chunks[2].meta_json.is_none());
+        assert!(chunks[3].meta_json.is_none());
     }
 
     #[test]
     fn tc_187_long_indented_block_splits_inside_the_block() {
-        let text = format!("    {}", "y".repeat(509));
+        let text = format!("    {}", "y".repeat(CHUNK_LIMIT + 1));
         let chunks = chunk_markdown(&text);
-        assert_eq!(chunks.len(), 2);
-        assert_eq!((chunks[0].start, chunks[0].end), (0, 512));
-        assert_eq!((chunks[1].start, chunks[1].end), (448, 513));
-        assert!(chunks[0].text.starts_with("    "));
-        assert!(chunks[0].heading_path.is_empty());
-        assert!(chunks[1].heading_path.is_empty());
-        assert!(chunks[0].text.chars().all(|c| c == ' ' || c == 'y'));
+        assert_eq!(chunks.len(), 3);
+        assert_eq!((chunks[0].start, chunks[0].end), (0, 4));
+        assert_eq!(chunks[0].text, "    ");
+        assert_eq!((chunks[1].start, chunks[1].end), (4, 4 + CHUNK_LIMIT));
+        assert_eq!(
+            (chunks[2].start, chunks[2].end),
+            (4 + CHUNK_LIMIT - OVERLAP, 4 + CHUNK_LIMIT + 1)
+        );
         assert!(chunks[1].text.chars().all(|c| c == 'y'));
+        assert!(chunks[2].text.chars().all(|c| c == 'y'));
+        assert!(chunks[0].heading_path.is_empty());
+        assert!(chunks[2].heading_path.is_empty());
         assert!(chunks[0].meta_json.is_none());
     }
 }

@@ -130,7 +130,7 @@ fn item_text(cref: &str, node: &Value) -> Option<String> {
 
 fn push_pieces(chunks: &mut Vec<Chunk>, text: &str, path: &[String], meta: &str) {
     let chars: Vec<char> = text.chars().collect();
-    for (start, end) in split_range(0, chars.len()) {
+    for (start, end) in split_range(&chars, 0, chars.len()) {
         chunks.push(Chunk {
             text: chars[start..end].iter().collect(),
             start,
@@ -286,7 +286,10 @@ fn empty_bounded_grid(rows: usize, cols: usize) -> String {
         return String::new();
     }
     let line = "\t".repeat(cols - 1);
-    (0..rows).map(|_| line.as_str()).collect::<Vec<_>>().join("\n")
+    (0..rows)
+        .map(|_| line.as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn cell_pos(cell: &Value) -> Option<(usize, usize)> {
@@ -709,7 +712,10 @@ mod tests {
             }],
             "body": {"children": [{"$ref": "#/key_value_items/0"}]}
         });
-        assert_eq!(texts(&cut(&doc.to_string())), vec!["name\tada\nrole\tadmin"]);
+        assert_eq!(
+            texts(&cut(&doc.to_string())),
+            vec!["name\tada\nrole\tadmin"]
+        );
     }
 
     #[test]

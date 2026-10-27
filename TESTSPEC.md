@@ -2,7 +2,7 @@
 
 Status: version 1. The cases in this file are implemented and run in CI. Cases carry stable IDs (`TC-n`). Tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-283, and TC-286. TC-284 and TC-285 are unused.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-286.
 
 ## Conventions
 
@@ -167,8 +167,8 @@ Unless a case says otherwise:
 ## REQ-28
 
 - **TC-66** `docs_fts` uses the FTS5 `unicode61` tokenizer and no stemmer.
-- **TC-67** A Chunk whose text is `installation` is not found by the FTS phrase `install`.
-- **TC-68** A Chunk whose text is `Install` is found by the FTS phrase `install`. A Chunk whose text is `café` is found by the FTS phrase `cafe`.
+- **TC-67** A Chunk whose text is `installation` is not found by the full-text query `install`.
+- **TC-68** A Chunk whose text is `Install` is found by the full-text query `install`. A Chunk whose text is `café` is found by the full-text query `cafe`.
 - **TC-69** An English Chunk and a German Chunk in the same table are indexed with that same tokenizer.
 
 ## REQ-29
@@ -202,7 +202,7 @@ Unless a case says otherwise:
 
 - **TC-85** `CREATE` and `INSERT` take no chunk size. `CREATE VIRTUAL TABLE docs USING ragite(chunk_size=100)` fails and leaves no table.
 - **TC-86** A Chunk's text does not contain scalars from the next section. Overlap scalars stay inside the section that was split.
-- **TC-87** Once `L` is recorded, a paragraph, fenced block, indented block, or Docling item longer than `L` becomes more than one Chunk. A heading or an HTML comment longer than `L` stays one Chunk. Split pieces follow TC-200.
+- **TC-87** Once `L` is recorded, a paragraph, fenced block, indented block, or Docling item longer than `L` becomes more than one Chunk. A heading or an HTML comment longer than `L` stays one Chunk. A split with no whitespace follows TC-200. A split on a word boundary follows TC-284.
 
 ## REQ-34
 
@@ -437,7 +437,8 @@ Unless a case says otherwise:
 
 ## REQ-70
 
-- **TC-200** Once `N` is recorded, a split paragraph, code block, or Docling item copies the last `N` scalars of one piece onto the start of the next. Both Chunk texts contain that run. Their ranges overlap by `N`. The first piece has no copied prefix. The copied run does not include scalars from outside that paragraph, block, or item.
+- **TC-200** Once `N` and `L` are recorded, a unit with no whitespace in the window still ends the first piece at `L` scalars and starts the next piece `N` scalars earlier. Both Chunk texts contain that run. The first piece has no copied prefix. The copied run does not include scalars from outside that paragraph, block, or item.
+- **TC-284** A paragraph of words whose scalar cut would fall inside a word ends each piece on U+0009, U+000A, U+000D, or U+0020 when REQ-70 finds that boundary. Each piece holds at most `L` scalars. The next piece starts on such a boundary, and the copied run is at least `N` scalars. A token longer than `L` with no whitespace inside the window ends at `L` and copies exactly `N`. A short word before that token copies nothing. The same split covers a Markdown paragraph, a fenced block, an indented block, an HTML paragraph, and a Docling item.
 
 ## REQ-71
 
@@ -463,9 +464,10 @@ Unless a case says otherwise:
 
 ## REQ-75
 
-- **TC-210** `MATCH 'cats AND dogs'` finds a Chunk whose text contains the phrase `cats AND dogs` and does not find a Chunk whose text is `cats dogs`.
+- **TC-210** `MATCH 'cats AND dogs'` finds a Chunk whose text is `cats AND dogs` and does not find a Chunk whose text is `cats dogs`, because the token `and` is absent.
 - **TC-211** `MATCH 'NOT cats'` finds a Chunk `not cats` and does not find a Chunk whose text is only `cats`. `MATCH 'install*'` does not find `installation`.
-- **TC-212** `MATCH 'say "hello" there'` does not fail. The quotation marks are escaped into one FTS phrase. The vector side embeds the same characters, plus the query prefix.
+- **TC-212** `MATCH 'say "hello" there'` does not fail. The full-text tokens are `say`, `hello`, and `there`. The vector side embeds the same characters, plus the query prefix.
+- **TC-285** `MATCH 'dogs AND cats'` and `MATCH 'cats dogs'` both find a Chunk `cats AND dogs`. `MATCH 'cats dogs birds'` is not a full-text hit. That Chunk still returns from the vector side when its distance is within the maximum. `MATCH '***'` and `MATCH '"'` do not fail and match nothing on the full-text side. For this Chunk those two queries are farther than the maximum, so they return no rows.
 
 ## REQ-76
 

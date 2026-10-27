@@ -130,6 +130,91 @@ mod tests {
     }
 
     #[test]
+    fn tc_284_long_unit_splits_on_a_word_boundary() {
+        let words = std::iter::repeat("abcdefghij")
+            .take(60)
+            .collect::<Vec<_>>()
+            .join(" ");
+        let plain = chunk_plain(&words);
+        assert_word_pieces(&plain);
+        assert!(plain[0].text.ends_with(' '));
+        assert!(plain[0].end <= CHUNK_LIMIT);
+        assert!(plain[1].start < plain[0].end);
+        assert!(plain[0].end - plain[1].start >= OVERLAP);
+        assert!(plain[1].text.starts_with(|ch: char| !is_split_space(ch)));
+
+        let mut token = String::from("hi ");
+        token.push_str(&"x".repeat(CHUNK_LIMIT + 20));
+        let hard = chunk_plain(&token);
+        assert_eq!(hard[0].text, "hi ");
+        assert_eq!(hard[1].start, 3);
+        assert_eq!(hard[1].text.chars().count(), CHUNK_LIMIT);
+        assert_eq!(hard[2].start, 3 + CHUNK_LIMIT - OVERLAP);
+        assert!(hard[1].text.chars().all(|ch| ch == 'x'));
+
+        assert_word_pieces(&chunk_markdown(&words));
+        let fenced = format!("```\n{words}\n```\n");
+        assert_word_pieces(&chunk_markdown(&fenced));
+        let indented = words
+            .split(' ')
+            .map(|word| format!("    {word}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_word_pieces(&chunk_markdown(&indented));
+        assert_word_pieces(&chunk_html(&format!("<p>{words}</p>")));
+        let doc = serde_json::json!({
+            "schema_name": "DoclingDocument",
+            "texts": [{
+                "self_ref": "#/texts/0",
+                "label": "text",
+                "text": words
+            }],
+            "body": {"children": [{"$ref": "#/texts/0"}]}
+        });
+        let doc_chunks = chunk_docling(&doc.to_string()).expect("docling");
+        assert_word_pieces(&doc_chunks);
+
+        // The only boundary in the first window sits less than `OVERLAP` before
+        // the length limit, so the piece ends on it and the next piece still
+        // starts exactly `OVERLAP` earlier, inside the word.
+        for (sep, label) in [(' ', "space"), ('\t', "tab"), ('\n', "lf"), ('\r', "cr")] {
+            let mut text = "a".repeat(CHUNK_LIMIT - OVERLAP);
+            text.push(sep);
+            text.push_str(&"b".repeat(CHUNK_LIMIT));
+            let chunks = chunk_plain(&text);
+            assert_eq!(chunks.len(), 3, "{label}");
+            assert!(chunks[0].text.ends_with(sep), "{label}");
+            assert_eq!(chunks[0].end, CHUNK_LIMIT - OVERLAP + 1, "{label}");
+            assert_eq!(chunks[1].start, chunks[0].end - OVERLAP, "{label}");
+            assert!(chunks[1].text.starts_with('a'), "{label}");
+            assert!(chunks[1].text.ends_with(sep), "{label}");
+            assert!(chunks[2].text.chars().all(|ch| ch == 'b'), "{label}");
+            crate::invariants::check_plain(&text).unwrap_or_else(|err| panic!("{label}: {err}"));
+        }
+    }
+
+    fn is_split_space(ch: char) -> bool {
+        matches!(ch, ' ' | '\t' | '\n' | '\r')
+    }
+
+    fn assert_word_pieces(chunks: &[Chunk]) {
+        assert!(chunks.len() >= 2, "expected a split");
+        for chunk in chunks {
+            assert!(chunk.text.chars().count() <= CHUNK_LIMIT);
+        }
+        let mut saw_overlap = false;
+        for pair in chunks.windows(2) {
+            if pair[1].start >= pair[0].end || pair[1].start <= pair[0].start {
+                continue;
+            }
+            saw_overlap = true;
+            assert!(pair[0].end - pair[1].start >= OVERLAP);
+            assert!(pair[0].text.ends_with([' ', '\t', '\n', '\r']));
+        }
+        assert!(saw_overlap, "expected an overlapping next piece");
+    }
+
+    #[test]
     fn tc_200_overlap_copies_the_last_n_scalars() {
         let text: String = (0..CHUNK_LIMIT + 1).map(|_| 'x').collect();
         let chunks = chunk_plain(&text);

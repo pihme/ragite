@@ -29,7 +29,7 @@ A RAGite build has no runtime switch for chunk size, overlap, fusion constant, w
 | Model, prefixes, `Role`, `BuiltinModel::embed_blob` | `crates/ragite-core/src/model.rs` |
 | Chunk invariants used by the fuzz targets and TC-250 | `crates/ragite-core/src/invariants.rs` |
 | Format check `canonical_format`, chunker dispatch `write_chunks` | `crates/ragite-sqlite/src/vtab/mod.rs` |
-| Search: `plan`, `rows`, `vector_ids`, `fts_ids`, `fts_phrase` | `crates/ragite-sqlite/src/vtab/search.rs` (`best_index` and `filter` in `vtab/mod.rs` only adapt the SQLite callbacks) |
+| Search: `plan`, `rows`, `vector_ids`, `fts_ids`, `unicode61_tokens` | `crates/ragite-sqlite/src/vtab/search.rs` (`best_index` and `filter` in `vtab/mod.rs` only adapt the SQLite callbacks) |
 | Shadow names, lockstep Chunk writes, FTS5 tokenizer, vector distance metric | `crates/ragite-sqlite/src/vtab/shadows.rs` |
 
 `ragite-core` must not link SQLite (REQ-1). Chunking and fusion logic goes there, and `ragite-sqlite` only calls it.
@@ -82,7 +82,7 @@ pub(crate) fn cut(text: &str) -> Vec<Chunk> {
     let mut path: Vec<String> = Vec::new();
     for (unit_start, unit_end) in units(&chars, &mut path) {
         // split_range applies CHUNK_LIMIT and OVERLAP and keeps the overlap inside the unit.
-        for (start, end) in split_range(unit_start, unit_end) {
+        for (start, end) in split_range(&chars, unit_start, unit_end) {
             out.push(Chunk {
                 text: chars[start..end].iter().collect(),
                 start,
@@ -101,7 +101,7 @@ pub(crate) fn cut(text: &str) -> Vec<Chunk> {
 Rules every chunker on `main` follows. A new one should follow them too, or the spec has to say otherwise:
 
 - **Offsets are Unicode scalars**, the same units as a Rust `char` (REQ-31). For a text format, `text` is the exact slice `chars[start..end]`, and `invariants.rs` (`check_exact_slice`) relies on that. HTML is the documented exception: `start`/`end` cover the source span and `text` is the visible text. Docling counts inside each item's own string.
-- **Length and overlap come from `split_range`.** It cuts a unit longer than `CHUNK_LIMIT` into pieces of `CHUNK_LIMIT` scalars, and each next piece starts `OVERLAP` scalars before the previous one ends (REQ-70, REQ-95). Call it on one unit at a time, so the overlap never crosses a unit boundary. A unit the spec keeps whole, such as a heading, is pushed without `split_range`, as `push_whole` in `markdown.rs` does.
+- **Length and overlap come from `split_range`.** It ends a piece on a word boundary inside `CHUNK_LIMIT` when the unit has a space, tab, or newline there (REQ-70, REQ-95). The next piece starts on the latest word boundary at least `OVERLAP` scalars earlier, so the copied run can be longer than `OVERLAP`. When no boundary lies that far back, the next piece starts exactly `OVERLAP` scalars earlier. A piece shorter than `OVERLAP` is not copied. A unit with no whitespace in the window is still cut at `CHUNK_LIMIT`. Call it on one unit at a time, so the overlap never crosses a unit boundary. A unit the spec keeps whole, such as a heading, is pushed without `split_range`, as `push_whole` in `markdown.rs` does.
 - **No empty Chunks.** A unit with no characters produces nothing (REQ-36, REQ-48). A whitespace-only unit is still text where the spec says so.
 - **Emission order is the Chunk id order** (REQ-52). `insert_chunk` writes Chunks in the order the `Vec` holds them. If you collect out of order, sort before returning, as `html::cut_pieces` sorts by `start`.
 - **The heading path holds titles only** (REQ-56): no `#` marks and no tags, outermost first. `ragite-sqlite` serialises it with `heading_path_json`.
@@ -145,7 +145,7 @@ Things to know before you change anything:
 1. Returns no rows for an empty query, without running the Model (REQ-43).
 2. Embeds the query with `Role::Query`, so the query prefix is added (REQ-45).
 3. `vector_ids`: a sqlite-vec KNN on `<name>_vec` with `k = FUSION_DEPTH`, ordered by cosine distance. Neighbors farther than `MAX_COSINE_DISTANCE`, and neighbors whose distance is NULL, are dropped. The kept Chunks stay closest first.
-4. `fts_ids`: FTS5 on `<name>_fts` with the query wrapped as one phrase by `fts_phrase` (REQ-75), ordered by `bm25()`, `LIMIT FUSION_DEPTH`.
+4. `fts_ids`: `unicode61_tokens` inserts the query into `temp.ragite_tok` (created once per connection, `tokenize='unicode61'`) and reads the tokens from `temp.ragite_tok_v`, the `fts5vocab` table. `fts_and` quotes each token and joins them with `AND` (REQ-75). No tokens means no full-text rows and no error. FTS5 then runs that query on `<name>_fts`, ordered by `bm25()`, `LIMIT FUSION_DEPTH`. The inserted row is deleted before the function returns, and `last_insert_rowid` is restored. `changes()` reports that delete.
 5. `reciprocal_rank_fusion(&vector, &full_text)`: each list adds `1/(RRF_K + rank)` with rank starting at 1, and a Chunk on both lists sums its two terms.
 6. On `<name>_chunks`, `order_fused_chunks` sorts by Score, then `doc_id`, then Chunk id. On `<name>`, `best_document_scores` keeps each Document's **best** Chunk Score, not a sum.
 
@@ -162,7 +162,7 @@ None of these can be set from SQL or at `CREATE VIRTUAL TABLE`. Each one is a co
 | Tie order | `doc_id`, then Chunk id | `order_fused_chunks`, `best_document_scores` | REQ-41 |
 | Vector metric | cosine | `distance_metric=cosine` in `create_shadows` | REQ-66 |
 | Maximum cosine distance | 0.8879346251487732 | `MAX_COSINE_DISTANCE` in `lib.rs`, applied in `vector_ids` after the KNN | REQ-66, section 8.1 |
-| FTS query | one plain phrase, no operators | `fts_phrase` | REQ-75 |
+| FTS query | AND of quoted `unicode61` tokens, no operators | `fts_and` | REQ-75 |
 | FTS tokenizer | `unicode61`, no stemming | `tokenize = 'unicode61'` in `create_shadows` | REQ-28 |
 | BM25 column weights | FTS5 defaults (one column) | `bm25({name})` in `fts_ids` | none |
 | Query/passage prefixes | empty for the built-in Model | `QUERY_PREFIX`/`PASSAGE_PREFIX` in `model.rs`; a provider build sets `RAGITE_QUERY_PREFIX`/`RAGITE_PASSAGE_PREFIX` | REQ-45, REQ-23 |

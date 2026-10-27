@@ -91,7 +91,7 @@ SELECT chunk, heading_path, meta_json FROM docs_chunks WHERE source = 'contract.
 
 Chunking is fixed for a build; there are no chunking parameters to pass. To change it in the code, see [tinkering.md](tinkering.md). In version 1:
 
-- A chunk holds at most **512 Unicode characters**. A longer paragraph is split, and each next piece repeats the last **64 characters** of the previous one.
+- A chunk holds at most **512 Unicode characters**. A longer paragraph is split after a space, tab, or newline when one falls inside that limit. The next piece starts on such a boundary at least **64 characters** earlier, or further back when that is what lands on a boundary. A stretch with no whitespace is still cut at 512, and the next piece then repeats the last 64 characters. A piece shorter than 64 characters is not repeated.
 - `text/plain`: one chunk per paragraph (paragraphs are separated by a blank line).
 - `text/markdown`: each heading line is its own chunk; the text under it is cut at blank lines. A fenced or indented code block stays one paragraph. `heading_path` lists the headings above a chunk.
 - `text/html`: each `h1`–`h6` is a chunk; `p`, `li`, `pre`, `blockquote`, `td`, `th`, and `textarea` are paragraphs. `script` and `style` are dropped; whitespace is collapsed outside `pre`.
@@ -183,7 +183,7 @@ These do not select rows before the search. Each one only sees the fused candida
 
 ### What the full-text side matches
 
-The query text is searched in the full-text index **as one exact phrase** (REQ-75). FTS5 operators (`AND`, `OR`, `NOT`, `*`, quotes) are plain text, and there is no stemming (`install` does not match `installation`). A natural-language question rarely appears word for word in a document, so for such queries the result is effectively the vector ranking; the full-text side helps when the query quotes the document, such as an error message, a name, or a code identifier:
+The query text is plain text (REQ-75). RAGite splits it the way the full-text index does: a token is a run of letters and numbers, and every other character is a separator. A chunk is a full-text hit only when it contains every token. The tokens may sit in any order, and other words in the chunk do not matter. `AND`, `OR`, `NOT`, `*`, and quotes are not operators. A star does not search for a prefix, and there is no stemming, so `install` does not match `installation`. `How do I install it?` is a hit only when the chunk contains each of those words. A chunk that has only some of them is left to the vector ranking. `replace the binary` matches the sentence below, including when those words appear in another order or with other words between them:
 
 ```sql
 SELECT chunk, round(score, 4) AS score

@@ -1,6 +1,6 @@
 # RAGite specification
 
-Status: version 1. The interface in this file is implemented in the current release. Requirements carry stable IDs (`REQ-n`); new ones get the next free number, removed ones are not reused. Section 10 records each change, newest first.
+Status: version 1. The interface in this file is implemented in the current release. Requirements carry stable IDs (`REQ-n`); new ones get the next free number, removed ones are not reused. A constraint is a rule for the shape of the code. It has no `REQ-n` and no test cases. Section 10 records each change, newest first.
 
 ## 1. Goal
 
@@ -125,6 +125,8 @@ The Score is the number Reciprocal Rank Fusion assigns to a Chunk. A higher Scor
 ## 5. Source linkage: documents and chunks
 
 Rules that apply to every format are in section 5.1. Each media type has its own subsection. When one requirement covers more than one format, each subsection states the part that applies there, under the same ID.
+
+**Constraint. Chunkers stay independent.** The plain-text, Markdown, HTML, and Docling chunkers are separate. Each one may contain its own scan of newlines and blank lines, even when another chunker has a similar scan. They do not share that scan. The split of a unit that is longer than the length limit may stay one shared function, because REQ-70 is the same rule for every format and the copied scalars stay inside that unit. Do not reopen.
 
 ### 5.1 Common to every format
 
@@ -255,7 +257,11 @@ potion-retrieval-32M is the built-in Model. In the Model2Vec benchmark (bench/RE
 
 ## 10. Change history
 
-Newest first. An entry names the requirements it adds or edits, and why. A requirement marked "Do not reopen" stays closed unless an entry says it was reopened.
+Newest first. An entry names the requirements or constraints it adds or edits, and why. A requirement or constraint marked "Do not reopen" stays closed unless an entry says it was reopened.
+
+### 2026-10-27 — Chunkers stay independent
+
+Added the constraint "Chunkers stay independent" in section 5. The plain-text, Markdown, HTML, and Docling chunkers keep their own scans, including newlines and blank lines. Duplicated scan code is accepted. The shared length-limit split stays, because REQ-70 is one rule. A constraint has no `REQ-n` and no test cases. No requirement was reopened.
 
 ### 2026-10-18 — `LIMIT` stays on the fused rows
 

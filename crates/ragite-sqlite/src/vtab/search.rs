@@ -18,7 +18,7 @@ use super::{
     COL_C_DOC, COL_C_SOURCE, COL_CHUNK, COL_DOC_ID, COL_END, COL_FORMAT, COL_HASH, COL_META,
     COL_PATH, COL_SOURCE, COL_START, COL_TEXT, Row,
 };
-use crate::sql::{self, Stmt};
+use crate::sql::Stmt;
 
 unsafe extern "C" {
     fn ragite_vtab_in_first(value: *mut sqlite3_value, out: *mut *mut sqlite3_value) -> c_int;
@@ -298,7 +298,7 @@ fn fts_ids(
     depth: i64,
     eqs: &[PushedTerm],
 ) -> Result<Vec<i64>, String> {
-    let Some(match_query) = fts_and_query(table.db, query)? else {
+    let Some(match_query) = fts_and_query(query) else {
         return Ok(Vec::new());
     };
     let names = super::shadows::tables(table.schema, table.doc_name);
@@ -383,33 +383,15 @@ fn chunk_id_restriction(table: &Table<'_>, eqs: &[PushedTerm]) -> Result<String,
     ))
 }
 
-/// The vocab table lives in `temp` too, so its argument is the bare name
-/// `ragite_tok`. A `temp.` prefix is resolved again inside `temp`.
-pub(super) fn ensure_tokenizer(db: *mut sqlite3) -> Result<(), String> {
-    sql_exec(
-        db,
-        "CREATE VIRTUAL TABLE IF NOT EXISTS temp.ragite_tok USING fts5(text, tokenize='unicode61')",
-    )?;
-    sql_exec(
-        db,
-        "CREATE VIRTUAL TABLE IF NOT EXISTS temp.ragite_tok_v USING fts5vocab(ragite_tok, row)",
-    )?;
-    Ok(())
-}
-
-fn sql_exec(db: *mut sqlite3, sql_text: &str) -> Result<(), String> {
-    sql::exec(db, sql_text).map_err(|err| format!("full-text tokenizer setup failed: {err}"))
-}
-
 /// AND of the query's `unicode61` tokens, or `None` when there are none.
 /// No tokens must not be sent to FTS5. There is nothing to match, and the
 /// statement must not fail (REQ-75).
-fn fts_and_query(db: *mut sqlite3, query: &str) -> Result<Option<String>, String> {
-    let tokens = unicode61_tokens(db, query)?;
+fn fts_and_query(query: &str) -> Option<String> {
+    let tokens = super::unicode61::tokens(query);
     if tokens.is_empty() {
-        return Ok(None);
+        return None;
     }
-    Ok(Some(fts_and(&tokens)))
+    Some(fts_and(&tokens))
 }
 
 fn fts_and(tokens: &[String]) -> String {
@@ -433,72 +415,6 @@ fn quote_fts_token(out: &mut String, token: &str) {
         out.push(ch);
     }
     out.push('"');
-}
-
-struct SavedRowid {
-    db: *mut sqlite3,
-    rowid: i64,
-}
-
-impl Drop for SavedRowid {
-    fn drop(&mut self) {
-        // The tokenizer insert is not the caller's insert (sqlite3.h).
-        sql::set_last_insert_rowid(self.db, self.rowid);
-    }
-}
-
-fn unicode61_tokens(db: *mut sqlite3, text: &str) -> Result<Vec<String>, String> {
-    if !tokenizer_present(db)? {
-        ensure_tokenizer(db)?;
-    }
-    let saved = SavedRowid {
-        db,
-        rowid: sql::last_insert_rowid(db),
-    };
-    let insert = Stmt::prepare(db, "INSERT INTO temp.ragite_tok(text) VALUES (?1)")?;
-    insert.bind_text(1, text)?;
-    while insert.step()? {}
-    drop(insert);
-    let doc = sql::last_insert_rowid(db);
-    let terms = read_terms(db, doc);
-    let deleted = delete_token_row(db, doc);
-    drop(saved);
-    deleted?;
-    terms
-}
-
-fn tokenizer_present(db: *mut sqlite3) -> Result<bool, String> {
-    let stmt = Stmt::prepare(
-        db,
-        "SELECT 1 FROM temp.sqlite_master WHERE type = 'table' AND name = 'ragite_tok_v'",
-    )?;
-    stmt.step()
-}
-
-fn read_terms(db: *mut sqlite3, doc: i64) -> Result<Vec<String>, String> {
-    let stmt = Stmt::prepare(
-        db,
-        "SELECT term FROM temp.ragite_tok_v WHERE doc = ?1 ORDER BY term",
-    )?;
-    stmt.bind_i64(1, doc)?;
-    let mut tokens = Vec::new();
-    while stmt.step()? {
-        let Some(term) = stmt.column_text(0) else {
-            continue;
-        };
-        if term.is_empty() || tokens.contains(&term) {
-            continue;
-        }
-        tokens.push(term);
-    }
-    Ok(tokens)
-}
-
-fn delete_token_row(db: *mut sqlite3, doc: i64) -> Result<(), String> {
-    let stmt = Stmt::prepare(db, "DELETE FROM temp.ragite_tok WHERE rowid = ?1")?;
-    stmt.bind_i64(1, doc)?;
-    while stmt.step()? {}
-    Ok(())
 }
 
 fn read_ids(stmt: &Stmt) -> Result<Vec<i64>, String> {

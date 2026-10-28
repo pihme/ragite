@@ -29,7 +29,7 @@ A RAGite build has no runtime switch for chunk size, overlap, fusion constant, w
 | Model, prefixes, `Role`, `BuiltinModel::embed_blob` | `crates/ragite-core/src/model.rs` |
 | Chunk invariants used by the fuzz targets and TC-250 | `crates/ragite-core/src/invariants.rs` |
 | Format check `canonical_format`, chunker dispatch `write_chunks` | `crates/ragite-sqlite/src/vtab/mod.rs` |
-| Search: `plan`, `rows`, `vector_ids`, `fts_ids`, `unicode61_tokens` | `crates/ragite-sqlite/src/vtab/search.rs` (`best_index` and `filter` in `vtab/mod.rs` only adapt the SQLite callbacks) |
+| Search: `plan`, `rows`, `vector_ids`, `fts_ids`, `unicode61::tokens` | `crates/ragite-sqlite/src/vtab/search.rs` (`best_index` and `filter` in `vtab/mod.rs` only adapt the SQLite callbacks). Token tables: `crates/ragite-sqlite/src/vtab/unicode61.rs` |
 | Shadow names, lockstep Chunk writes, FTS5 tokenizer, vector distance metric | `crates/ragite-sqlite/src/vtab/shadows.rs` |
 
 `ragite-core` must not link SQLite (REQ-1). Chunking and fusion logic goes there, and `ragite-sqlite` only calls it.
@@ -145,7 +145,7 @@ Things to know before you change anything:
 1. Returns no rows for an empty query, without running the Model (REQ-43).
 2. Embeds the query with `Role::Query`, so the query prefix is added (REQ-45).
 3. `vector_ids`: a sqlite-vec KNN on `<name>_vec` with `k = FUSION_DEPTH`, ordered by cosine distance. Neighbors farther than `MAX_COSINE_DISTANCE`, and neighbors whose distance is NULL, are dropped. The kept Chunks stay closest first.
-4. `fts_ids`: `unicode61_tokens` inserts the query into `temp.ragite_tok` (created once per connection, `tokenize='unicode61'`) and reads the tokens from `temp.ragite_tok_v`, the `fts5vocab` table. `fts_and` quotes each token and joins them with `AND` (REQ-75). No tokens means no full-text rows and no error. FTS5 then runs that query on `<name>_fts`, ordered by `bm25()`, `LIMIT FUSION_DEPTH`. The inserted row is deleted before the function returns, and `last_insert_rowid` is restored. `changes()` reports that delete.
+4. `fts_ids`: `unicode61::tokens` splits the query with the default FTS5 `unicode61` rules (categories `L*`, `N*`, and `Co`, plus category code 0, the table default that covers CJK ideographs in this Unicode 6.1 table; Unicode 6.1 case fold; `remove_diacritics=1`). The tables live in `vtab/unicode61.rs`. No temporary table is created, so a connection that cannot write can still load the extension and run `MATCH` (REQ-105). `fts_and` quotes each token and joins them with `AND` (REQ-75). No tokens means no full-text rows and no error. FTS5 then runs that query on `<name>_fts`, ordered by `bm25()`, `LIMIT FUSION_DEPTH`.
 5. `reciprocal_rank_fusion(&vector, &full_text)`: each list adds `1/(RRF_K + rank)` with rank starting at 1, and a Chunk on both lists sums its two terms.
 6. On `<name>_chunks`, `order_fused_chunks` sorts by Score, then `doc_id`, then Chunk id. On `<name>`, `best_document_scores` keeps each Document's **best** Chunk Score, not a sum.
 

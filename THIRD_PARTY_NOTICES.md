@@ -18,6 +18,8 @@ Public domain. The headers `third_party/sqlite/sqlite3.h` and `third_party/sqlit
 
 The extension does not compile or link `sqlite3.c`. A host application supplies SQLite and loads RAGite.
 
+The category, case-fold, and diacritic tables in `crates/ragite-sqlite/src/vtab/unicode61.rs` are copied from SQLite's public-domain `ext/fts5/fts5_unicode2.c`. Those bytes are the same in SQLite 3.45.1 and 3.50.2. The file is machine-generated from Unicode 6.1 and carries the same blessing as the headers above. RAGite uses them so a `MATCH` can be split into the tokens the full-text index stored without writing a temporary table.
+
 ### sqlite-vec 0.1.9
 
 MIT OR Apache-2.0. Source commit `e9f598abfa0c06b328d8fe5da9c3760cce74be10` (tag `v0.1.9`, https://github.com/asg017/sqlite-vec). The files `third_party/sqlite-vec/sqlite-vec.c`, `sqlite-vec.h`, `LICENSE-MIT`, and `LICENSE-APACHE` are that revision. `sqlite-vec.h` is generated from the upstream header template with version `0.1.9`, date `2026-03-31`, and that commit. That revision ships no NOTICE file.

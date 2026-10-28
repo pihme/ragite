@@ -271,7 +271,7 @@ jobs:
   # On a push with nothing to release, release-plz-release still succeeds, so
   # this job runs as before. If tagging fails, this job is skipped.
   release-plz-pr:
-    needs: [test, release-inputs, release-plz-release]
+    needs: [test, release-profile, release-inputs, release-plz-release]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository_owner == 'pihme'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -308,7 +308,7 @@ jobs:
 
   # Tag and publish the GitHub Release only when that pull request merges.
   release-plz-release:
-    needs: test
+    needs: [test, release-profile, fresh-checkout, parity-platform, release-inputs]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository_owner == 'pihme'
     runs-on: ubuntu-24.04
     timeout-minutes: 45

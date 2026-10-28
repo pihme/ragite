@@ -41,6 +41,7 @@ License: **MIT OR Apache-2.0** (dual, Rust convention; `LICENSE-MIT`, `LICENSE-A
 - `feat:` bumps minor. `fix:` and `perf:` bump patch. A breaking change (`feat!:`, `fix!:`, or a `BREAKING CHANGE:` footer) bumps major.
 - `docs:`, `test:`, `refactor:`, `chore:`, `ci:`, and `build:` never bump. A commit counts only when it touches `crates/ragite-core` or `crates/ragite-sqlite`, or when `make release-inputs` updates a `release-inputs.txt` for an input outside those directories.
 - Release-plz opens the release pull request after CI passes on `main`. Merging it tags and publishes. Do not tag, bump versions, or create releases by hand.
+- **Only the owner approves and merges the release pull request** (this repo is past 1.0.0). When it is clean, Maintainer sets `ready-for-human` (not `ready-for-qa`) and informs the owner. See `docs/agents/team.md`.
 - On a release pull request (`release-plz-*` branch) CI runs only `release-pr-check` (`.github/scripts/check-release-pr.sh`): the branch may change only the crate versions, `Cargo.lock`, and the changelogs, and they must agree. The full suite already ran on `main` and runs again on the push after the merge. Editing anything else in a release pull request fails the check.
 
 ### Dependabot

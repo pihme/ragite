@@ -58,7 +58,7 @@ jobs:
           cargo build -p ragite-sqlite
           cargo test --workspace
 
-  # Apple's sqlite3 cannot load extensions. Homebrew's can. Windows uses the sqlite package.
+  # sqlite3 comes from a pinned sqlite.org build on both runners (see below).
   parity-platform:
     name: parity (${{ matrix.os }})
     if: ${{ !(startsWith(github.head_ref || github.ref_name, 'release-plz-') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
@@ -81,27 +81,39 @@ jobs:
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
 
-      - name: Install SQLite (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install sqlite
-          echo "$(brew --prefix sqlite)/bin" >> "$GITHUB_PATH"
-
-      - name: Install SQLite (Windows)
-        if: runner.os == 'Windows'
-        # Pinned download instead of `choco install sqlite`: the Chocolatey feed
-        # fails intermittently and choco then exits 0 with "installed 0/0".
+      # sqlite3 is pinned to an official sqlite.org build on both runners instead of
+      # whatever Homebrew/Chocolatey serve that day (Apple's sqlite3 cannot load
+      # extensions; the Chocolatey feed fails intermittently and choco still exits 0).
+      - name: Install pinned SQLite
         shell: bash
         env:
-          SQLITE_URL: https://sqlite.org/2026/sqlite-tools-win-x64-3540100.zip
-          SQLITE_SHA256: fb20997ade5583a5fbf1e36db7bc3c82c9416b3f314f16961e1572aa4e49487d
+          SQLITE_URL: ${{ runner.os == 'Windows' && 'https://sqlite.org/2026/sqlite-tools-win-x64-3540100.zip' || 'https://sqlite.org/2026/sqlite-tools-osx-arm64-3540100.zip' }}
+          SQLITE_SHA256: ${{ runner.os == 'Windows' && 'fb20997ade5583a5fbf1e36db7bc3c82c9416b3f314f16961e1572aa4e49487d' || 'f5ba6f9c08bcb3b7220dea07238cd3de88b936cf5b956d7fe458bf2ff0782db6' }}
         run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = macOS ] && [ "$(uname -m)" != arm64 ]; then
+            echo "::error::pinned sqlite3 is arm64, runner is $(uname -m)"; exit 1
+          fi
           dir="$RUNNER_TEMP/sqlite"
           mkdir -p "$dir"
           curl -fsSL --retry 5 --retry-all-errors -o "$dir/sqlite.zip" "$SQLITE_URL"
-          echo "$SQLITE_SHA256  $dir/sqlite.zip" | sha256sum -c -
+          if command -v sha256sum >/dev/null; then sum=sha256sum; else sum="shasum -a 256"; fi
+          echo "$SQLITE_SHA256  $dir/sqlite.zip" | $sum -c -
           unzip -q -o "$dir/sqlite.zip" -d "$dir"
-          cygpath -w "$dir" >> "$GITHUB_PATH"
+          chmod +x "$dir"/sqlite3* || true
+          if [ "$RUNNER_OS" = Windows ]; then cygpath -w "$dir" >> "$GITHUB_PATH"; else echo "$dir" >> "$GITHUB_PATH"; fi
+
+      - name: Check required tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "bash $BASH_VERSION"
+          for t in git git-lfs cargo rustc sqlite3; do
+            command -v "$t" >/dev/null || { echo "::error::required tool '$t' not on PATH"; exit 1; }
+          done
+          git --version; git lfs version; cargo --version
+          v=$(sqlite3 -version); echo "sqlite3 $v"
+          case "$v" in 3.54.1*) ;; *) echo "::error::expected pinned sqlite3 3.54.1, got: $v"; exit 1;; esac
 
       - name: Build the extension and run the parity test
         shell: bash

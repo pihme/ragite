@@ -8,7 +8,7 @@ use std::ffi::{c_char, c_int};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use libsqlite3_sys::{
-    sqlite3, sqlite3_api_routines, sqlite3_create_module_v2, SQLITE_ERROR, SQLITE_OK,
+    SQLITE_ERROR, SQLITE_OK, sqlite3, sqlite3_api_routines, sqlite3_create_module_v2,
 };
 
 unsafe extern "C" {
@@ -58,23 +58,13 @@ unsafe fn init(
     }
     let module = vtab::module();
     let rc = unsafe {
-        sqlite3_create_module_v2(
-            db,
-            c"ragite".as_ptr(),
-            module,
-            std::ptr::null_mut(),
-            None,
-        )
+        sqlite3_create_module_v2(db, c"ragite".as_ptr(), module, std::ptr::null_mut(), None)
     };
     if rc != SQLITE_OK {
         set_pz(pz_err, "RAGite could not register its module");
         return rc;
     }
     if let Err(err) = func::register(db) {
-        set_pz(pz_err, &err);
-        return SQLITE_ERROR;
-    }
-    if let Err(err) = vtab::ensure_tokenizer(db) {
         set_pz(pz_err, &err);
         return SQLITE_ERROR;
     }

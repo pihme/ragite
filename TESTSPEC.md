@@ -2,7 +2,7 @@
 
 Status: version 1. The cases in this file are implemented and run in CI. Cases carry stable IDs (`TC-n`). Tests cite these IDs, in the test name or a comment. A test may cite more than one case. New cases get the next free number. Removed numbers are not reused.
 
-Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-286.
+Each case checks the requirement in its heading. Headings follow [SPEC.md](SPEC.md). Terms are in [GLOSSARY.md](GLOSSARY.md). This file does not add requirements. The case IDs are TC-1 through TC-290.
 
 ## Conventions
 
@@ -610,3 +610,10 @@ Unless a case says otherwise:
 ## REQ-104
 
 - **TC-283** After `load_extension`, `vec_version()` returns `v0.1.9`. The scalar functions on that connection are `vec_version`, `vec_debug`, `vec_distance_l2`, `vec_distance_l1`, `vec_distance_hamming`, `vec_distance_cosine`, `vec_length`, `vec_type`, `vec_to_json`, `vec_add`, `vec_sub`, `vec_slice`, `vec_normalize`, `vec_f32`, `vec_bit`, `vec_int8`, `vec_quantize_int8`, and `vec_quantize_binary`. The modules are `vec0` and `vec_each`. `vec_npy_file`, `vec_npy_each`, `vec_static_blob_from_raw`, `vec_static_blobs`, and `vec_static_blob_entries` are absent.
+
+## REQ-105
+
+- **TC-287** `PRAGMA query_only=ON` runs before `load_extension`. The load succeeds. `SELECT 'loaded'` returns that row.
+- **TC-288** A database already holds two Documents, `Install the backup` and `café menu`. On a new connection, `PRAGMA query_only=ON` runs before `load_extension`. `SELECT` with no `MATCH` returns both Documents. `MATCH 'install'` and `MATCH 'cafe'` on `docs` and on `docs_chunks` return the same rows, in the same order, with the same Scores, as those statements on a connection that can write. `MATCH '***'` does not fail and returns the same rows as the writable connection.
+- **TC-289** The queries in TC-288, on a connection opened with `mode=ro`.
+- **TC-290** The queries in TC-288, on a connection opened with `immutable=1`.

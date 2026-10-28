@@ -22,6 +22,7 @@ use crate::sql::{self, Stmt};
 
 mod search;
 mod shadows;
+mod unicode61;
 
 const DOC_COLUMNS: &str =
     "doc_id INTEGER, text TEXT, source TEXT, format TEXT, hash TEXT, score REAL";
@@ -55,10 +56,6 @@ static ALLOW_DROP: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::ne
 /// Set only around the companion `CREATE` issued by `shadows::create_shadows`.
 static ALLOW_CREATE: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
-
-pub(crate) fn ensure_tokenizer(db: *mut sqlite3) -> Result<(), String> {
-    search::ensure_tokenizer(db)
-}
 
 pub fn module() -> &'static sqlite3_module {
     static MODULE: OnceLock<sqlite3_module> = OnceLock::new();
@@ -585,10 +582,7 @@ unsafe fn destroy(vtab: *mut sqlite3_vtab) -> c_int {
         let allowed = ALLOW_DROP.lock().expect("drop set").remove(&key);
         if !allowed {
             // DROP reports SQLite's generic error. xDestroy's zErrMsg is not copied.
-            set_vtab_error(
-                vtab,
-                &format!("cannot drop companion table: {companion}"),
-            );
+            set_vtab_error(vtab, &format!("cannot drop companion table: {companion}"));
             return SQLITE_ERROR;
         }
         unsafe {

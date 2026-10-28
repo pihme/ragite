@@ -122,6 +122,10 @@ The Score is the number Reciprocal Rank Fusion assigns to a Chunk. A higher Scor
 
 - **REQ-104** Loading the extension registers sqlite-vec 0.1.9 by calling `sqlite3_vec_init` before the `ragite` module. After `load_extension`, that connection has the scalar functions `vec_version`, `vec_debug`, `vec_distance_l2`, `vec_distance_l1`, `vec_distance_hamming`, `vec_distance_cosine`, `vec_length`, `vec_type`, `vec_to_json`, `vec_add`, `vec_sub`, `vec_slice`, `vec_normalize`, `vec_f32`, `vec_bit`, `vec_int8`, `vec_quantize_int8`, and `vec_quantize_binary`, and the modules `vec0` and `vec_each`. `vec_version()` returns `v0.1.9`. `vec_npy_file`, `vec_npy_each`, `vec_static_blob_from_raw`, `vec_static_blobs`, and `vec_static_blob_entries` are absent. The shadow table `<name>_vec` remains the internal `vec0` table in section 5.1. Do not reopen.
 
+### 4.9 Read-only connections
+
+- **REQ-105** Loading the extension succeeds on a connection that cannot write, and a query on that connection succeeds. A connection cannot write when it has run `PRAGMA query_only=ON`, when the database was opened with `mode=ro`, or when it was opened with `immutable=1`. The database already contains the Table. A query with no `MATCH` returns the stored rows. A `MATCH` on the Document table and a `MATCH` on `<name>_chunks` return the same rows, in the same order, with the same Scores, as that statement on a connection that can write. Creating a Table or writing a Document still requires a connection that can write. Do not reopen.
+
 ## 5. Source linkage: documents and chunks
 
 Rules that apply to every format are in section 5.1. Each media type has its own subsection. When one requirement covers more than one format, each subsection states the part that applies there, under the same ID.
@@ -259,6 +263,10 @@ potion-retrieval-32M is the built-in Model. In the Model2Vec benchmark (bench/RE
 ## 10. Change history
 
 Newest first. An entry names the requirements or constraints it adds or edits, and why. A requirement or constraint marked "Do not reopen" stays closed unless an entry says it was reopened.
+
+### 2026-10-28 — A connection that cannot write can load and query
+
+Added REQ-105. Extension init created temporary FTS5 tables, so a connection that had run `PRAGMA query_only=ON` failed while loading, with `attempt to write a readonly database`. A `MATCH` also wrote a row into those tables. A database opened `mode=ro` or `immutable=1` cannot write either. Loading the extension and running a query, including `MATCH`, must succeed on all three. Creating a Table and writing a Document still need a connection that can write. The full-text index stays `unicode61` (REQ-28). Query tokens stay the tokens that tokenizer stored (REQ-75). A Document does not need to be written again. TC-287 checks the load after `PRAGMA query_only=ON`. TC-288, TC-289, and TC-290 check a plain query and a `MATCH` on `query_only`, `mode=ro`, and `immutable=1`.
 
 ### 2026-10-27 — Vector neighbors past a fixed cosine distance are left out
 

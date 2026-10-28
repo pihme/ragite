@@ -1213,9 +1213,7 @@ pub(super) fn tokens(text: &str) -> Vec<String> {
         while i < codes.len() && (is_token(codes[i]) || is_diacritic(codes[i])) {
             let folded = fold(codes[i] as i32);
             if folded > 0 {
-                if let Some(ch) = char::from_u32(folded as u32) {
-                    token.push(ch);
-                }
+                token.extend(char::from_u32(folded as u32));
             }
             i += 1;
         }

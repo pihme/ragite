@@ -16,7 +16,7 @@ default = ["builtin-model"]
 builtin-model = ["ragite-core/builtin-model"]
 
 [dependencies]
-libsqlite3-sys = { version = "0.38.2", features = ["loadable_extension"] }
+libsqlite3-sys = { version = "0.39.0", features = ["loadable_extension"] }
 ragite-core = { path = "../ragite-core", default-features = false }
 
 [build-dependencies]

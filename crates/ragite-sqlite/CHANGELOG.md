@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2](https://github.com/pihme/ragite/compare/ragite/v1.1.1...ragite/v1.1.2) - 2026-10-28
+
+### Fixed
+
+- load and search on a read-only connection ([#130](https://github.com/pihme/ragite/pull/130))
+
+### Other
+
+- *(deps)* bump the nix group across 8 directories ([#122](https://github.com/pihme/ragite/pull/122))
+
 ## [1.1.1](https://github.com/pihme/ragite/compare/ragite/v1.1.0...ragite/v1.1.1) - 2026-10-28
 
 ### Fixed

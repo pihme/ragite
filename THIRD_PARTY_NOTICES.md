@@ -279,13 +279,12 @@ Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. Thos
 | ahash | 0.8.12 | MIT OR Apache-2.0 |
 | aho-corasick | 1.1.5 | Unlicense OR MIT |
 | anyhow | 1.0.104 | MIT OR Apache-2.0 |
-| autocfg | 1.5.1 | Apache-2.0 OR MIT |
 | base64 | 0.13.1 | MIT/Apache-2.0 |
 | bitflags | 2.13.2 | MIT OR Apache-2.0 |
 | block-buffer | 0.12.1 | MIT OR Apache-2.0 |
 | bumpalo | 3.20.3 | MIT OR Apache-2.0 |
 | castaway | 0.2.4 | MIT |
-| cc | 1.9.0 | MIT OR Apache-2.0 |
+| cc | 1.10.0 | MIT OR Apache-2.0 |
 | cfg-if | 1.0.5 | MIT OR Apache-2.0 |
 | compact_str | 0.9.1 | MIT |
 | console | 0.15.11 | MIT |
@@ -307,7 +306,7 @@ Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. Thos
 | either | 1.19.0 | MIT OR Apache-2.0 |
 | encode_unicode | 1.0.0 | Apache-2.0 OR MIT |
 | esaxx-rs | 0.1.10 | Apache-2.0 |
-| find-msvc-tools | 0.1.14 | MIT OR Apache-2.0 |
+| find-msvc-tools | 0.1.15 | MIT OR Apache-2.0 |
 | fnv | 1.0.7 | Apache-2.0 / MIT |
 | futures-core | 0.3.34 | MIT OR Apache-2.0 |
 | futures-task | 0.3.34 | MIT OR Apache-2.0 |
@@ -325,17 +324,12 @@ Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. Thos
 | log | 0.4.34 | MIT OR Apache-2.0 |
 | macro_rules_attribute | 0.2.3 | Apache-2.0 OR MIT OR Zlib |
 | macro_rules_attribute-proc_macro | 0.2.3 | Apache-2.0 OR MIT OR Zlib |
-| matrixmultiply | 0.3.11 | MIT/Apache-2.0 |
 | memchr | 2.8.3 | Unlicense OR MIT |
 | minimal-lexical | 0.2.1 | MIT/Apache-2.0 |
-| model2vec-rs | 0.3.0 | MIT (LICENSE file; metadata license field is empty) |
+| model2vec-rs | 0.4.0 | MIT (LICENSE file; metadata license field is empty) |
 | monostate | 0.1.18 | MIT OR Apache-2.0 |
 | monostate-impl | 0.1.18 | MIT OR Apache-2.0 |
-| ndarray | 0.15.6 | MIT OR Apache-2.0 |
 | nom | 7.1.3 | MIT |
-| num-complex | 0.4.6 | MIT OR Apache-2.0 |
-| num-integer | 0.1.47 | MIT OR Apache-2.0 |
-| num-traits | 0.2.19 | MIT OR Apache-2.0 |
 | number_prefix | 0.4.0 | MIT |
 | once_cell | 1.21.4 | MIT OR Apache-2.0 |
 | onig | 6.5.3 | MIT |
@@ -353,7 +347,6 @@ Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. Thos
 | rand | 0.9.5 | MIT OR Apache-2.0 |
 | rand_chacha | 0.9.0 | MIT OR Apache-2.0 |
 | rand_core | 0.9.5 | MIT OR Apache-2.0 |
-| rawpointer | 0.2.1 | MIT/Apache-2.0 |
 | rayon | 1.12.0 | MIT OR Apache-2.0 |
 | rayon-cond | 0.4.0 | Apache-2.0/MIT |
 | rayon-core | 1.13.0 | MIT OR Apache-2.0 |
@@ -378,9 +371,11 @@ Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. Thos
 | syn | 3.0.9 | MIT OR Apache-2.0 |
 | thiserror | 2.0.21 | MIT OR Apache-2.0 |
 | thiserror-impl | 2.0.21 | MIT OR Apache-2.0 |
+| tinyvec | 1.13.3 | Zlib OR Apache-2.0 OR MIT |
 | tokenizers | 0.21.4 | Apache-2.0 |
 | typenum | 1.20.1 | MIT OR Apache-2.0 |
 | unicode-ident | 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 |
+| unicode-normalization | 0.1.26 | (MIT OR Apache-2.0) AND Unicode-3.0 |
 | unicode-normalization-alignments | 0.1.12 | MIT/Apache-2.0 |
 | unicode-segmentation | 1.13.3 | MIT OR Apache-2.0 |
 | unicode-width | 0.2.2 | MIT OR Apache-2.0 |
@@ -441,7 +436,7 @@ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 SUCH DAMAGE.
 ```
 
-`unicode-ident` 1.0.27 is `(MIT OR Apache-2.0) AND Unicode-3.0`. The Unicode-3.0 notice in its `LICENSE-UNICODE` file is:
+`unicode-ident` 1.0.27 and `unicode-normalization` 0.1.26 are `(MIT OR Apache-2.0) AND Unicode-3.0`. Both crates ship the same `LICENSE-UNICODE` file. Its Unicode-3.0 notice is:
 
 ```
 UNICODE LICENSE V3

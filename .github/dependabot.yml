@@ -1,6 +1,7 @@
 # Commit prefixes follow the release rules in AGENTS.md (release-plz):
-#   workspace Cargo deps -> fix(deps): patch release (crates are release paths)
-#   fuzz Cargo workspace -> chore(deps): not shipped
+#   Cargo (workspace / and fuzz/, one group) -> fix(deps): patch release (crates
+#     are release paths). A bump that only touches fuzz/Cargo.lock cuts no release:
+#     it changes no crate directory and no release input.
 #   Go language tests -> chore(deps): tests only
 #   bench pip deps -> chore(deps): harness only, not needed to build or test
 #   Nix shells -> fix(deps): patch release, because nix/release/flake.lock is a
@@ -14,8 +15,12 @@
 # Never reword a Dependabot title into feat! (see AGENTS.md).
 version: 2
 updates:
+  # fuzz/ is its own Cargo workspace (publish = false), not shipped. One block and
+  # one group with /, so a crate in both locks comes as one PR.
   - package-ecosystem: cargo
-    directory: /
+    directories:
+      - /
+      - /fuzz
     schedule:
       interval: weekly
       day: saturday
@@ -26,21 +31,6 @@ updates:
       include: scope
     groups:
       cargo-minor-and-patch:
-        update-types: [minor, patch]
-
-  # fuzz/ is its own Cargo workspace (publish = false). Not shipped.
-  - package-ecosystem: cargo
-    directory: /fuzz
-    schedule:
-      interval: weekly
-      day: saturday
-    open-pull-requests-limit: 5
-    labels: [dependencies, ready-for-maintainer]
-    commit-message:
-      prefix: chore
-      include: scope
-    groups:
-      fuzz-cargo-minor-and-patch:
         update-types: [minor, patch]
 
   - package-ecosystem: gomod

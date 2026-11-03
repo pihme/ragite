@@ -515,11 +515,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Fuzz harness (not shipped)
 
-The `fuzz/` workspace is not linked into the extension and is not part of `make test`. Its lockfile is `fuzz/Cargo.lock`. The crates below are in that lock and absent from the root `Cargo.lock`, except `getrandom` 0.4.3 and `r-efi` 6.0.0, which are extra versions of crates already listed above. The license column is the `license` field from `cargo metadata --manifest-path fuzz/Cargo.toml`. Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. No resolved crate in that lock ships a NOTICE file.
+The `fuzz/` workspace is not linked into the extension and is not part of `make test`. Its lockfile is `fuzz/Cargo.lock`. The crates below are in that lock and absent from the root `Cargo.lock`, except `cc` 1.8.0, `find-msvc-tools` 0.1.14, `getrandom` 0.4.3 and `r-efi` 6.0.0, which are other versions of crates already listed above. The license column is the `license` field from `cargo metadata --manifest-path fuzz/Cargo.toml`. Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. No resolved crate in that lock ships a NOTICE file.
 
 | Crate | Version | License |
 | --- | --- | --- |
 | arbitrary | 1.5.0 | MIT OR Apache-2.0 |
+| cc | 1.8.0 | MIT OR Apache-2.0 |
+| find-msvc-tools | 0.1.14 | MIT OR Apache-2.0 |
 | getrandom | 0.4.3 | MIT OR Apache-2.0 |
 | jobserver | 0.1.35 | MIT OR Apache-2.0 |
 | libfuzzer-sys | 0.4.13 | (MIT OR Apache-2.0) AND NCSA |

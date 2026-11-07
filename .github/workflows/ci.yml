@@ -182,7 +182,7 @@ jobs:
 
       - name: SonarQube Cloud scan
         if: env.RUN_SONAR == 'true'
-        uses: SonarSource/sonarqube-scan-action@4d1dc0c91ee400dcf8a6dddf2f705ac36542e304 # v8.4.0
+        uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.4.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
@@ -320,7 +320,7 @@ jobs:
       - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
 
       - name: Open the release pull request
-        uses: release-plz/action@f67a7e724bdad4a0f6875f186060a0ca2770d76c # v0.5
+        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5
         with:
           command: release-pr
         env:
@@ -353,7 +353,7 @@ jobs:
 
       - name: Cut the release
         id: release
-        uses: release-plz/action@f67a7e724bdad4a0f6875f186060a0ca2770d76c # v0.5
+        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5
         with:
           command: release
         env:

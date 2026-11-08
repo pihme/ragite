@@ -33,8 +33,10 @@ jobs:
         run: bash .github/scripts/require-smudged-models.sh
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/bench
+      # bench/requirements.txt is generated from bench/requirements.in with every
+      # package pinned and hashed (see bench/README.md). Wheels only: no setup scripts run.
       - name: Install harness
-        run: pip install -r bench/requirements.txt
+        run: pip install --require-hashes --only-binary :all: -r bench/requirements.txt
       # Workflow inputs are passed as environment variables. Pasting an input
       # into a run script would let a model name or a dataset string execute as shell.
       - name: Build extension with the candidate

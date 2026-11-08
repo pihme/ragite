@@ -223,7 +223,7 @@ jobs:
 
       # The published library is built with zig against glibc 2.34 stubs, so it
       # loads on any distribution with glibc 2.34 or newer. Since #94 a plain
-      # cargo build --locked in the Nix shell linked against Nix's glibc (2.44).
+      # cargo build in the Nix shell linked against Nix's glibc (2.44).
       - name: Build the published library against glibc 2.34
         run: |
           env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \

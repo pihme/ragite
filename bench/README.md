@@ -42,11 +42,21 @@ One Model per run; start the next when the previous one is done to keep CI minut
 ### Parity and costs locally
 
 ```sh
-pip install -r bench/requirements.txt
+pip install --require-hashes --only-binary :all: -r bench/requirements.txt
 ext=$(bench/build_model.sh minishlab/potion-base-8M potion-base-8M)
 python3 bench/parity/check_parity.py --extension "$ext" --hf minishlab/potion-base-8M --kind model2vec
 bench/measure_costs.sh "$ext" bench/results/costs/potion-base-8M.json
 ```
+
+The harness dependencies are locked. `requirements.in` lists the direct dependencies; `requirements.txt` is generated from it and pins every package, transitive ones included, with sha256 hashes. Install from the lock as above, never from `requirements.in`, so every run measures with the same versions. The lock is resolved for the workflow's environment: CPython 3.12 (the `nix/bench` shell) on Linux x86_64. On another platform, install from `requirements.in` instead; those numbers are not comparable with the published run.
+
+To change a dependency, edit `requirements.in` and regenerate the lock with Python 3.12 on Linux x86_64 (pip-tools installed):
+
+```sh
+cd bench && pip-compile --allow-unsafe --generate-hashes --no-emit-index-url --strip-extras --output-file=requirements.txt requirements.in
+```
+
+Add `--upgrade` to move all pins to the newest allowed versions. Dependabot (pip, `/bench`) updates both files the same way.
 
 Costs only mean something on a quiet machine, one Model at a time. Large Models (potion-multilingual-128M, 512 MB weights) need about 3 GB free RAM to build.
 

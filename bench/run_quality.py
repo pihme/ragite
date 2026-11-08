@@ -16,7 +16,7 @@ sha256 of the frozen question file.
         --dataset mteb/scifact --out bench/results/scifact.json
     python3 bench/run_quality.py --extension ... --own bench/questions/own.jsonl ...
 
-Needs `pip install -r bench/requirements.txt` for MTEB datasets. Not run in normal CI.
+Needs the locked harness (`pip install --require-hashes --only-binary :all: -r bench/requirements.txt`) for MTEB datasets. Not run in normal CI.
 """
 import argparse
 import hashlib

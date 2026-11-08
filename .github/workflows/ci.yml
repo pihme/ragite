@@ -55,8 +55,8 @@ jobs:
       - name: Commands from CONTRIBUTING.md
         run: |
           cargo fetch --locked
-          cargo build -p ragite-sqlite
-          cargo test --workspace
+          cargo build --locked -p ragite-sqlite
+          cargo test --locked --workspace
 
   # sqlite3 comes from a pinned sqlite.org build on both runners (see below).
   parity-platform:
@@ -120,8 +120,8 @@ jobs:
         run: |
           command -v sqlite3
           sqlite3 -version
-          cargo build -p ragite-sqlite
-          cargo test -p ragite-sqlite --test parity
+          cargo build --locked -p ragite-sqlite
+          cargo test --locked -p ragite-sqlite --test parity
 
   # Coverage report only; there is no threshold and it never gates a merge.
   # The same job feeds SonarQube Cloud (coverage plus Clippy findings), so the
@@ -156,9 +156,9 @@ jobs:
           # The license test runs `cargo metadata --offline` (see Makefile).
           cargo fetch --locked
           env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
-            cargo build -p ragite-sqlite
+            cargo build --locked -p ragite-sqlite
           env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
-            cargo test --workspace
+            cargo test --locked --workspace
           cargo llvm-cov report --lcov --output-path lcov.info
           {
             echo '## Rust coverage'
@@ -208,7 +208,7 @@ jobs:
           # The license test runs `cargo metadata --offline`, so fetch every crate first.
           cargo fetch --locked
           start=$(date +%s)
-          env -u RAGITE_MODEL_PATH cargo build -p ragite-sqlite --release
+          env -u RAGITE_MODEL_PATH cargo build --locked -p ragite-sqlite --release
           echo "AFTER_S=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
           echo "AFTER_B=$(stat -c %s target/release/libragite.so)" >> "$GITHUB_ENV"
 
@@ -227,7 +227,7 @@ jobs:
       - name: Build the published library against glibc 2.34
         run: |
           env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
-            cargo zigbuild -p ragite-sqlite --release --target x86_64-unknown-linux-gnu.2.34
+            cargo zigbuild --locked -p ragite-sqlite --release --target x86_64-unknown-linux-gnu.2.34
 
       - name: Published library stays on the glibc 2.34 baseline
         run: bash .github/scripts/check-glibc-baseline.sh target/x86_64-unknown-linux-gnu/release/libragite.so 2.34
@@ -239,7 +239,7 @@ jobs:
             ubuntu:22.04@sha256:e0f80c829509ef4df9e76bd8944eb7b8ec25cbb379b112a7f9448b2c77a77c9b bash /smoke.sh /x/libragite.so
 
       - name: Test suite and parity against the release extension
-        run: env -u RAGITE_MODEL_PATH cargo test --workspace --release
+        run: env -u RAGITE_MODEL_PATH cargo test --locked --workspace --release
 
       - name: Summary
         run: |
@@ -371,7 +371,7 @@ jobs:
             exit 0
           fi
           env -u RAGITE_MODEL_PATH -u RAGITE_MODEL_NAME -u RAGITE_MODEL_REVISION -u RAGITE_QUERY_PREFIX -u RAGITE_PASSAGE_PREFIX \
-            cargo zigbuild -p ragite-sqlite --release --target x86_64-unknown-linux-gnu.2.34
+            cargo zigbuild --locked -p ragite-sqlite --release --target x86_64-unknown-linux-gnu.2.34
           so=target/x86_64-unknown-linux-gnu/release/libragite.so
           bash .github/scripts/check-glibc-baseline.sh "$so" 2.34
           gh release upload "$tag" \

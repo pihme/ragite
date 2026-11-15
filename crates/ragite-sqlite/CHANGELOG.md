@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.6](https://github.com/pihme/ragite/compare/ragite/v1.1.5...ragite/v1.1.6) - 2026-11-15
+
+### Fixed
+
+- *(deps)* bump the nix group across 8 directories with 2 updates ([#162](https://github.com/pihme/ragite/pull/162))
+
+### Other
+
+- find the extension on Rust 1.100 build layout ([#163](https://github.com/pihme/ragite/pull/163))
+
 ## [1.1.5](https://github.com/pihme/ragite/compare/ragite/v1.1.4...ragite/v1.1.5) - 2026-11-07
 
 ### Fixed

@@ -47,10 +47,22 @@ unsafe extern "C" fn log_sqlite_version() {
 }
 
 pub fn extension_path() -> PathBuf {
-    let mut path = std::env::current_exe().expect("test executable");
-    path.pop();
-    path.pop();
-    path.push(extension_file());
+    // The cdylib sits in the profile directory (`target/debug`). Older Cargo
+    // puts test binaries in `target/debug/deps`; Rust 1.100 moved them to
+    // `target/debug/build/<pkg>/<hash>/out`. Walk up until the file is found.
+    let exe = std::env::current_exe().expect("test executable");
+    let path = exe
+        .ancestors()
+        .skip(1)
+        .map(|dir| dir.join(extension_file()))
+        .find(|candidate| candidate.is_file())
+        .unwrap_or_else(|| {
+            let mut fallback = exe.clone();
+            fallback.pop();
+            fallback.pop();
+            fallback.push(extension_file());
+            fallback
+        });
     assert!(
         path.is_file(),
         "missing extension at {}; build it first with `cargo build -p ragite-sqlite` \

@@ -23,7 +23,9 @@ updates:
       - /fuzz
     schedule:
       interval: weekly
-      day: saturday
+      day: wednesday
+      time: "06:00"
+      timezone: "Europe/Berlin"
     open-pull-requests-limit: 5
     labels: [dependencies, ready-for-maintainer]
     commit-message:
@@ -37,7 +39,9 @@ updates:
     directory: /tests/languages/go
     schedule:
       interval: weekly
-      day: saturday
+      day: wednesday
+      time: "06:00"
+      timezone: "Europe/Berlin"
     open-pull-requests-limit: 5
     labels: [dependencies, ready-for-maintainer]
     commit-message:
@@ -51,7 +55,9 @@ updates:
     directory: /bench
     schedule:
       interval: weekly
-      day: saturday
+      day: wednesday
+      time: "06:00"
+      timezone: "Europe/Berlin"
     open-pull-requests-limit: 5
     labels: [dependencies, ready-for-maintainer]
     commit-message:
@@ -65,7 +71,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
-      day: saturday
+      day: wednesday
+      time: "06:00"
+      timezone: "Europe/Berlin"
     open-pull-requests-limit: 5
     labels: [dependencies, ready-for-maintainer]
     commit-message:
@@ -88,7 +96,9 @@ updates:
       - /nix/release
     schedule:
       interval: weekly
-      day: saturday
+      day: wednesday
+      time: "06:00"
+      timezone: "Europe/Berlin"
     open-pull-requests-limit: 5
     labels: [dependencies, ready-for-maintainer]
     commit-message:

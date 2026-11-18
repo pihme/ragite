@@ -31,7 +31,7 @@ jobs:
           lfs: true
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/bench
       # bench/requirements.txt is generated from bench/requirements.in with every
       # package pinned and hashed (see bench/README.md). Wheels only: no setup scripts run.

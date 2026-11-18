@@ -29,7 +29,7 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/bindings
 
       - name: Test
@@ -49,7 +49,7 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
 
       - name: Commands from CONTRIBUTING.md
@@ -144,7 +144,7 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/coverage
 
       - name: Measure coverage
@@ -182,7 +182,7 @@ jobs:
 
       - name: SonarQube Cloud scan
         if: env.RUN_SONAR == 'true'
-        uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.4.1
+        uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
@@ -200,7 +200,7 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/release
 
       - name: Build the release extension
@@ -316,7 +316,7 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
 
       - name: Open the release pull request
@@ -348,7 +348,7 @@ jobs:
       - name: Require the smudged model files
         run: bash .github/scripts/require-smudged-models.sh
 
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/release
 
       - name: Cut the release

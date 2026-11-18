@@ -23,7 +23,8 @@ License: **MIT OR Apache-2.0** (dual, Rust convention; `LICENSE-MIT`, `LICENSE-A
 - [Conventional Commits](https://www.conventionalcommits.org/) for every commit: `feat:`, `fix:`, `perf:`, `docs:`, `test:`, `refactor:`, `chore:`, `ci:`, `build:`, optional scope, `!` for breaking changes.
 - **Trivial changes go straight to `main`:** typos, small docs fixes, obvious small bugs, housekeeping. Keep commits small and focused; pull before you commit.
 - **Non-trivial findings become GitHub issues** (with the matching issue form): bugs you do not fix right away, design questions, anything that needs a decision. Do not hide them in a commit.
-- **Never force-push**, never rewrite pushed history, never delete branches or tags.
+- **Never force-push**, never rewrite pushed history, never delete tags.
+- **Branch cleanup:** a remote branch may be deleted only when its pull request is merged or closed and no open pull request uses it. The default branch, `gh-pages` and other deploy branches, protected or ruleset branches, and active release branches are never deleted. A branch with no pull request, or with commits that are not on `main`, is not deleted. Log every deleted branch with its last commit SHA so it can be restored.
 - **No comments, reviews, label changes, closes or merges on other people's issues and PRs** unless the maintainer asked for it in the session. Exception: Dependabot PRs (see below). Opening issues for your own findings and closing them with your own commits (`Closes #n`) is fine.
 - **Never write the skip-CI token** (the word `skip` and `ci` in square brackets, or any of its variants) in a commit message, not even quoted or explained: GitHub then skips CI for that push and no release is cut.
 

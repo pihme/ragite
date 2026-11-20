@@ -24,13 +24,21 @@ jobs:
     if: ${{ !(startsWith(github.head_ref || github.ref_name, 'release-plz-') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          lfs: true
+          lfs: false
 
-      - name: Require the smudged model files
-        run: bash .github/scripts/require-smudged-models.sh
+      # Only this CI job writes the LFS cache, and only on a miss. Pull requests
+      # can seed one copy so a rerun can prove a hit; later PRs restore main's
+      # cache and do not save. Other jobs only restore.
+      - name: Set up Git LFS models
+        uses: ./.github/actions/setup-lfs-models
+        with:
+          save-cache: "true"
 
       - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/bindings
@@ -43,14 +51,17 @@ jobs:
     if: ${{ !(startsWith(github.head_ref || github.ref_name, 'release-plz-') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          lfs: true
+          lfs: false
           persist-credentials: false
 
-      - name: Require the smudged model files
-        run: bash .github/scripts/require-smudged-models.sh
+      - name: Set up Git LFS models
+        uses: ./.github/actions/setup-lfs-models
 
       - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
@@ -67,6 +78,9 @@ jobs:
     if: ${{ !(startsWith(github.head_ref || github.ref_name, 'release-plz-') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -74,11 +88,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          lfs: true
+          lfs: false
 
-      - name: Require the smudged model files
-        shell: bash
-        run: bash .github/scripts/require-smudged-models.sh
+      - name: Set up Git LFS models
+        uses: ./.github/actions/setup-lfs-models
 
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 
@@ -137,15 +150,18 @@ jobs:
       # Scan pull requests and main only, and only when the secret exists.
       # Dependabot and fork PRs get no secret; Dependabot is also skipped explicitly.
       RUN_SONAR: ${{ secrets.SONAR_TOKEN != '' && github.actor != 'dependabot[bot]' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') }}
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          lfs: true
+          lfs: false
           # Sonar needs the full history for blame and new-code detection.
           fetch-depth: 0
 
-      - name: Require the smudged model files
-        run: bash .github/scripts/require-smudged-models.sh
+      - name: Set up Git LFS models
+        uses: ./.github/actions/setup-lfs-models
 
       - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/coverage
@@ -194,14 +210,17 @@ jobs:
     if: ${{ !(startsWith(github.head_ref || github.ref_name, 'release-plz-') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          lfs: true
+          lfs: false
           persist-credentials: false
 
-      - name: Require the smudged model files
-        run: bash .github/scripts/require-smudged-models.sh
+      - name: Set up Git LFS models
+        uses: ./.github/actions/setup-lfs-models
 
       - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/release
@@ -305,6 +324,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: read
     concurrency:
       group: release-plz-${{ github.ref }}
       cancel-in-progress: false
@@ -313,11 +333,11 @@ jobs:
         with:
           fetch-depth: 0
           # release-plz may compile ragite-core; build.rs rejects LFS pointer files.
-          lfs: true
+          lfs: false
           persist-credentials: false
 
-      - name: Require the smudged model files
-        run: bash .github/scripts/require-smudged-models.sh
+      - name: Set up Git LFS models
+        uses: ./.github/actions/setup-lfs-models
 
       - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/sqlite
@@ -341,15 +361,16 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-          lfs: true
+          lfs: false
           persist-credentials: false
 
-      - name: Require the smudged model files
-        run: bash .github/scripts/require-smudged-models.sh
+      - name: Set up Git LFS models
+        uses: ./.github/actions/setup-lfs-models
 
       - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/release

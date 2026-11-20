@@ -17,7 +17,7 @@ if git config --get http.https://github.com/.extraheader >/dev/null 2>&1; then
   exit 0
 fi
 
-if [ -z "${GITHUB_TOKEN:-}" ]; then
+if [[ -z "${GITHUB_TOKEN:-}" ]]; then
   echo "GITHUB_TOKEN is not set; cannot authenticate git lfs pull" >&2
   exit 1
 fi

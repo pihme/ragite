@@ -2,6 +2,9 @@ name: CI
 
 on:
   push:
+    # Pull-request branches already run via pull_request. A second run on the
+    # branch push doubled CI in November (49 duplicate runs).
+    branches: [main]
   pull_request:
   workflow_dispatch:
 

@@ -19,10 +19,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          lfs: true
+          lfs: false
 
-      - name: Require the smudged model files
-        run: bash .github/scripts/require-smudged-models.sh
+      - name: Set up Git LFS models
+        uses: ./.github/actions/setup-lfs-models
+        with:
+          save-cache: "true"
 
       - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
       - run: bash .github/scripts/load-nix-env.sh ./nix/mutants

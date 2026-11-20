@@ -1,0 +1,54 @@
+name: Set up Git LFS models
+description: >
+  Restore cached Git LFS objects, pull only on a cache miss, smudge the model
+  files, and optionally save the cache. Run after actions/checkout with lfs:
+  false. The cache key is computed from the pointer files, before they are
+  replaced by the real objects; the save step reuses that key.
+
+inputs:
+  save-cache:
+    description: Save the LFS object cache when the restore missed.
+    required: false
+    default: "false"
+  token:
+    description: Token used only for git lfs pull on a cache miss.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Restore Git LFS object cache
+      id: lfs-cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: .git/lfs
+        key: lfs-${{ hashFiles('models/**/model.safetensors', 'models/**/tokenizer.json') }}
+        # One archive for Linux, macOS, and Windows: the objects are
+        # content-addressed and do not depend on the runner OS.
+        enableCrossOsArchive: true
+
+    - name: Fetch Git LFS objects
+      if: steps.lfs-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: bash "${{ github.action_path }}/pull.sh"
+
+    - name: Checkout Git LFS files
+      shell: bash
+      run: git lfs checkout
+
+    - name: Require the smudged model files
+      shell: bash
+      run: bash "${{ github.workspace }}/.github/scripts/require-smudged-models.sh"
+
+    - name: Save Git LFS object cache
+      if: ${{ inputs.save-cache == 'true' && steps.lfs-cache.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: .git/lfs
+        # Reuse the restore key. hashFiles here would hash the smudged files
+        # and produce a different key.
+        key: ${{ steps.lfs-cache.outputs.cache-primary-key }}
+        enableCrossOsArchive: true

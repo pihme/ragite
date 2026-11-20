@@ -10,8 +10,6 @@ on:
 
 permissions:
   contents: read
-  # Restore the shared Git LFS model cache. The test job also writes it.
-  actions: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -53,6 +51,9 @@ jobs:
     if: ${{ !(startsWith(github.head_ref || github.ref_name, 'release-plz-') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -77,6 +78,9 @@ jobs:
     if: ${{ !(startsWith(github.head_ref || github.ref_name, 'release-plz-') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -146,6 +150,9 @@ jobs:
       # Scan pull requests and main only, and only when the secret exists.
       # Dependabot and fork PRs get no secret; Dependabot is also skipped explicitly.
       RUN_SONAR: ${{ secrets.SONAR_TOKEN != '' && github.actor != 'dependabot[bot]' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') }}
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -203,6 +210,9 @@ jobs:
     if: ${{ !(startsWith(github.head_ref || github.ref_name, 'release-plz-') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

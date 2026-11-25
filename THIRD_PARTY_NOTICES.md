@@ -326,7 +326,7 @@ Where a license expression offers a choice, RAGite takes MIT or Apache-2.0. Thos
 | macro_rules_attribute-proc_macro | 0.2.3 | Apache-2.0 OR MIT OR Zlib |
 | memchr | 2.8.3 | Unlicense OR MIT |
 | minimal-lexical | 0.2.1 | MIT/Apache-2.0 |
-| model2vec-rs | 0.4.0 | MIT (LICENSE file; metadata license field is empty) |
+| model2vec-rs | 0.5.0 | MIT (LICENSE file; metadata license field is empty) |
 | monostate | 0.1.18 | MIT OR Apache-2.0 |
 | monostate-impl | 0.1.18 | MIT OR Apache-2.0 |
 | nom | 7.1.3 | MIT |

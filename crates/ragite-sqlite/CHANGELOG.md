@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.8](https://github.com/pihme/ragite/compare/ragite/v1.1.7...ragite/v1.1.8) - 2026-11-25
+
+### Fixed
+
+- *(deps)* bump the nix group across 8 directories with 2 updates ([#186](https://github.com/pihme/ragite/pull/186))
+- *(deps)* bump model2vec-rs from 0.4.0 to 0.5.0 ([#185](https://github.com/pihme/ragite/pull/185))
+
 ## [1.1.7](https://github.com/pihme/ragite/compare/ragite/v1.1.6...ragite/v1.1.7) - 2026-11-18
 
 ### Fixed
